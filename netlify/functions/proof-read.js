@@ -35,7 +35,9 @@ exports.handler = async (event, context) => {
     } = payload;
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
+    // UPDATED: Using specific version "gemini-1.5-flash-001" to resolve 404 error
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
 
     let systemPrompt = "";
     
