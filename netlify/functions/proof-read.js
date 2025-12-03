@@ -19,11 +19,19 @@ exports.handler = async (event, context) => {
     }
 
     const payload = JSON.parse(event.body);
-    const { mode = "analyze", content, mediaType, mimeType, isBinary, expectedEdits = [] } = payload;
+    const { 
+      mode = "analyze", 
+      content, 
+      mediaType, 
+      mimeType, 
+      isBinary, 
+      expectedEdits = [],
+      // New Context Fields
+      targetAudience = "General Audience",
+      styleGuide = "Standard Grammar Rules"
+    } = payload;
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    
-    // UPDATED: Using 'gemini-2.5-flash' based on your available models list
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
     
     let systemPrompt = "";
@@ -47,7 +55,18 @@ exports.handler = async (event, context) => {
 
       systemPrompt = `
         You are a professional content editor for ${mediaType}. ${toneInstruction}
-        Return ONLY a raw JSON array of objects with keys: "id", "original", "fix", "reason".
+        
+        CONTEXT:
+        - Target Audience: ${targetAudience}
+        - Custom Style Guide: ${styleGuide}
+        
+        Return ONLY a raw JSON array of objects.
+        Each object must have:
+        - "id": A unique number
+        - "original": The exact text to change
+        - "fix": The suggested replacement
+        - "reason": A brief explanation
+        - "confidence": "High", "Medium", or "Low" (Based on grammar rules vs stylistic preference)
       `;
     }
 
@@ -73,30 +92,10 @@ exports.handler = async (event, context) => {
 
   } catch (error) {
     console.error("Gemini API Error:", error);
-
-    // --- DIAGNOSTICS: FETCH AVAILABLE MODELS ---
-    let diagnosticMsg = "";
-    try {
-        const listReq = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-        const listData = await listReq.json();
-        if (listData.models) {
-            const modelNames = listData.models.map(m => m.name.replace('models/', '')).join(", ");
-            diagnosticMsg = ` | AVAILABLE MODELS DETECTED: [ ${modelNames} ]`;
-        } else {
-            diagnosticMsg = " | Could not list models. API Key might be invalid.";
-        }
-    } catch (diagError) {
-        diagnosticMsg = " | Diagnostics failed.";
-    }
-    // --------------------------------------------
-
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ 
-        error: "AI Model Error", 
-        details: (error.message || "Unknown error") + diagnosticMsg 
-      }),
+      body: JSON.stringify({ error: "AI Model Error", details: error.message }),
     };
   }
 };
