@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ProoferAI - Enterprise</title>
+    <title>Proof Buddy</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -14,6 +14,12 @@
         .scroller::-webkit-scrollbar { width: 6px; }
         .scroller::-webkit-scrollbar-track { background: #f1f1f1; }
         .scroller::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        
+        /* Suggestion Status Styles */
+        .suggestion-card { transition: all 0.2s; border-left-width: 4px; }
+        .status-pending { border-left-color: #cbd5e1; }
+        .status-accepted { border-left-color: #22c55e; background-color: #f0fdf4; }
+        .status-rejected { border-left-color: #ef4444; opacity: 0.6; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 h-screen flex flex-col overflow-hidden">
@@ -24,7 +30,7 @@
             <div class="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-200">
                 <svg class="text-white w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </div>
-            <h1 class="text-3xl font-bold text-slate-900 mb-2">ProoferAI Enterprise</h1>
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">Proof Buddy</h1>
             <p class="text-slate-500 mb-8">Collaborative content approval for teams.</p>
             <button onclick="signIn()" class="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-3 px-4 rounded-xl transition shadow-sm">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5" alt="G">
@@ -39,11 +45,17 @@
         
         <!-- NAVBAR -->
         <nav class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm z-40">
-            <div class="flex items-center gap-2 cursor-pointer" onclick="showDashboard()">
-                <div class="bg-indigo-600 p-1.5 rounded text-white">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+            <div class="flex items-center gap-8">
+                <div class="flex items-center gap-2 cursor-pointer" onclick="showDashboard()">
+                    <div class="bg-indigo-600 p-1.5 rounded text-white">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+                    </div>
+                    <span class="font-bold text-lg text-slate-800">Proof Buddy</span>
                 </div>
-                <span class="font-bold text-lg text-slate-800">Proofer<span class="text-indigo-600">AI</span></span>
+                <div class="hidden md:flex gap-4 text-sm font-medium">
+                    <button onclick="showDashboard()" class="text-slate-600 hover:text-indigo-600">Dashboard</button>
+                    <button onclick="showArchived()" class="text-slate-600 hover:text-indigo-600">Archived</button>
+                </div>
             </div>
             <div class="flex items-center gap-4">
                 <div class="text-right hidden md:block">
@@ -57,7 +69,7 @@
 
         <!-- DASHBOARD VIEW -->
         <div id="view-dashboard" class="flex-1 overflow-auto p-8 fade-in">
-            <div class="max-w-6xl mx-auto">
+            <div class="max-w-7xl mx-auto">
                 <div class="flex justify-between items-center mb-8">
                     <h2 class="text-2xl font-bold text-slate-800">Dashboard</h2>
                     <button onclick="startUpload()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-md flex items-center gap-2">
@@ -66,18 +78,30 @@
                     </button>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <!-- My Documents -->
-                    <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden h-[500px] flex flex-col">
-                        <div class="p-4 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700">Created by Me</div>
-                        <div id="list-my-docs" class="flex-1 overflow-y-auto p-2 scroller">
-                            <div class="p-8 text-center text-slate-400">Loading docs...</div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Team Projects (Visible to All) -->
+                    <div class="lg:col-span-2 bg-white rounded-xl shadow border border-slate-200 overflow-hidden h-[600px] flex flex-col">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700 flex justify-between items-center">
+                            <span>Team Projects (Public)</span>
+                            <span class="text-xs font-normal text-slate-500">Visible to team</span>
+                        </div>
+                        
+                        <!-- Table Header -->
+                        <div class="grid grid-cols-12 gap-4 p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
+                            <div class="col-span-5">Project Name</div>
+                            <div class="col-span-3">Creator</div>
+                            <div class="col-span-3">Assigned To</div>
+                            <div class="col-span-1 text-right">Action</div>
+                        </div>
+
+                        <div id="list-team-projects" class="flex-1 overflow-y-auto scroller">
+                            <div class="p-8 text-center text-slate-400">Loading projects...</div>
                         </div>
                     </div>
 
                     <!-- Assigned to Me -->
-                    <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden h-[500px] flex flex-col">
-                        <div class="p-4 border-b border-slate-100 bg-indigo-50 text-indigo-800 font-semibold flex justify-between">
+                    <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden h-[600px] flex flex-col border-t-4 border-t-indigo-500">
+                        <div class="p-4 border-b border-slate-100 bg-indigo-50 text-indigo-900 font-bold flex justify-between">
                             <span>Assigned to Me</span>
                             <span id="badge-assigned" class="bg-indigo-200 text-indigo-800 text-xs px-2 py-0.5 rounded-full hidden">0</span>
                         </div>
@@ -89,20 +113,34 @@
             </div>
         </div>
 
+        <!-- ARCHIVED VIEW -->
+        <div id="view-archived" class="hidden flex-1 overflow-auto p-8 fade-in bg-slate-100">
+            <div class="max-w-5xl mx-auto">
+                <div class="flex items-center gap-2 mb-6">
+                    <button onclick="showDashboard()" class="text-slate-400 hover:text-indigo-600">← Back</button>
+                    <h2 class="text-2xl font-bold text-slate-800">Archived Projects</h2>
+                </div>
+                <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+                    <div id="list-archived-docs" class="divide-y divide-slate-100">
+                        <div class="p-8 text-center text-slate-400">No archived projects found.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- UPLOAD WIZARD VIEW -->
         <div id="view-wizard" class="hidden flex-1 overflow-auto p-6 fade-in">
              <div class="max-w-3xl mx-auto bg-white rounded-xl shadow-lg border border-slate-200 p-8">
-                 <button onclick="showDashboard()" class="text-sm text-slate-400 hover:text-indigo-600 mb-4 flex items-center gap-1">← Back to Dashboard</button>
-                 
-                 <h2 class="text-2xl font-bold mb-6">Upload New Content</h2>
+                 <button onclick="showDashboard()" class="text-sm text-slate-400 hover:text-indigo-600 mb-4 flex items-center gap-1">← Cancel</button>
+                 <h2 id="wizard-title" class="text-2xl font-bold mb-6">Upload New Content</h2>
                  
                  <div class="space-y-6">
-                     <div>
+                     <div id="title-group">
                          <label class="block text-sm font-medium text-slate-700 mb-2">Project Title</label>
                          <input type="text" id="input-title" class="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none">
                      </div>
 
-                     <div>
+                     <div id="type-group">
                         <label class="block text-sm font-medium text-slate-700 mb-2">Media Type</label>
                         <select id="input-type" class="w-full border border-slate-300 rounded-lg p-3 bg-white">
                             <option value="signage">Printed Signage</option>
@@ -112,13 +150,13 @@
                         </select>
                      </div>
 
-                     <div class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:bg-slate-50 cursor-pointer" onclick="document.getElementById('file-upload').click()">
+                     <div class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:bg-slate-50 cursor-pointer transition" onclick="document.getElementById('file-upload').click()">
                          <div id="file-preview-name" class="text-slate-600">Click to upload (Image/PDF/Doc)</div>
                          <input type="file" id="file-upload" class="hidden" onchange="handleFilePreview(this)">
                      </div>
 
                      <button onclick="submitProject()" id="btn-submit-project" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">
-                         Analyze & Save Project
+                         Analyze & Save
                      </button>
                      <p id="upload-status" class="text-center text-sm text-slate-500 mt-2 hidden">Uploading & Analyzing...</p>
                  </div>
@@ -130,9 +168,9 @@
             <!-- Toolbar -->
             <div class="bg-white border-b px-6 py-3 flex justify-between items-center shadow-sm">
                 <div class="flex items-center gap-4">
-                    <button onclick="showDashboard()" class="text-slate-400 hover:text-indigo-600">← Back</button>
-                    <div>
-                        <h1 id="project-title-display" class="font-bold text-lg leading-tight">Project Title</h1>
+                    <button onclick="showDashboard()" class="text-slate-400 hover:text-indigo-600 font-medium">← Back</button>
+                    <div class="border-l pl-4 border-slate-200">
+                        <h1 id="project-title-display" class="font-bold text-lg leading-tight text-slate-800">Project Title</h1>
                         <span id="project-status-badge" class="text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-600">Draft</span>
                     </div>
                 </div>
@@ -144,20 +182,29 @@
             <div class="flex-1 flex overflow-hidden">
                 <!-- Left: Document -->
                 <div class="flex-1 overflow-auto p-6 flex justify-center bg-slate-200">
-                    <div id="doc-container" class="bg-white shadow-lg min-h-[800px] w-full max-w-3xl p-8 rounded">
+                    <div id="doc-container" class="bg-white shadow-lg min-h-[800px] w-full max-w-4xl p-8 rounded relative">
                         <!-- Content -->
                     </div>
                 </div>
 
                 <!-- Right: Feedback Panel -->
-                <div class="w-96 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
-                    <div class="p-4 bg-slate-50 border-b font-bold text-slate-700">AI Suggestions</div>
-                    <div id="ai-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller"></div>
+                <div class="w-[450px] bg-white border-l border-slate-200 flex flex-col overflow-hidden shadow-xl z-10">
+                    <div class="p-4 bg-slate-50 border-b flex justify-between items-center">
+                        <span class="font-bold text-slate-700">AI Analysis</span>
+                        <div id="verification-badge" class="hidden bg-green-100 text-green-700 text-xs px-2 py-1 rounded font-bold border border-green-200">Verified Revision</div>
+                    </div>
                     
-                    <div class="p-4 bg-indigo-50 border-t border-indigo-100">
-                        <div class="font-bold text-indigo-900 text-sm mb-2">Manager Comments</div>
-                        <div id="manager-comments-display" class="text-sm text-slate-600 italic mb-2 min-h-[20px]">No comments yet.</div>
-                        <textarea id="manager-input" class="w-full border p-2 rounded text-sm hidden" placeholder="Add feedback..."></textarea>
+                    <div id="ai-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller bg-slate-50/50">
+                        <!-- Suggestions -->
+                    </div>
+                    
+                    <div class="p-4 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                        <div class="font-bold text-indigo-900 text-sm mb-2 flex items-center gap-2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                            Manager Comments
+                        </div>
+                        <div id="manager-comments-display" class="text-sm text-slate-600 bg-slate-50 p-3 rounded border border-slate-100 min-h-[40px] mb-2">No comments yet.</div>
+                        <textarea id="manager-input" class="w-full border p-2 rounded text-sm hidden focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Add feedback for the creator..."></textarea>
                     </div>
                 </div>
             </div>
@@ -165,17 +212,47 @@
 
     </div>
 
-    <!-- ASSIGN MODAL -->
-    <div id="modal-assign" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center fade-in">
-        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+    <!-- MODALS -->
+    
+    <!-- Assign Modal -->
+    <div id="modal-assign" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center fade-in backdrop-blur-sm">
+        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform transition-all scale-100">
             <h3 class="text-xl font-bold mb-4">Assign Reviewer</h3>
             <p class="text-sm text-slate-500 mb-6">Select a team member to review this document.</p>
+            <div id="user-list-container" class="grid grid-cols-3 gap-4 mb-6 max-h-60 overflow-y-auto scroller"></div>
+            <button onclick="closeModal('modal-assign')" class="w-full bg-slate-100 text-slate-600 py-3 rounded-lg font-medium hover:bg-slate-200">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Checklist Modal -->
+    <div id="modal-checklist" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center fade-in backdrop-blur-sm">
+        <div class="bg-white rounded-2xl w-full max-w-lg p-8 shadow-2xl">
+            <h3 class="text-2xl font-bold mb-2">Final Approval Checklist</h3>
+            <p class="text-slate-500 mb-6 text-sm">Please confirm the following before approving.</p>
             
-            <div id="user-list-container" class="grid grid-cols-3 gap-4 mb-6 max-h-60 overflow-y-auto scroller">
-                <!-- User bubbles injected here -->
+            <div class="space-y-3 mb-8">
+                <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" class="approval-check w-5 h-5 text-indigo-600 rounded" onchange="validateChecklist()">
+                    <span class="text-slate-700">Grammar and spelling is accurate</span>
+                </label>
+                <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" class="approval-check w-5 h-5 text-indigo-600 rounded" onchange="validateChecklist()">
+                    <span class="text-slate-700">Images/Graphics represent message</span>
+                </label>
+                <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" class="approval-check w-5 h-5 text-indigo-600 rounded" onchange="validateChecklist()">
+                    <span class="text-slate-700">Dates and times are stated clearly</span>
+                </label>
+                <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
+                    <input type="checkbox" class="approval-check w-5 h-5 text-indigo-600 rounded" onchange="validateChecklist()">
+                    <span class="text-slate-700">Terms and conditions are correct</span>
+                </label>
             </div>
 
-            <button onclick="closeModal()" class="w-full bg-slate-100 text-slate-600 py-3 rounded-lg font-medium hover:bg-slate-200">Cancel</button>
+            <div class="flex gap-3">
+                <button onclick="closeModal('modal-checklist')" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-lg font-medium">Cancel</button>
+                <button id="btn-confirm-approve" disabled onclick="executeApproval()" class="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">Approve Project</button>
+            </div>
         </div>
     </div>
 
@@ -183,7 +260,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, doc, getDoc, getDocs, updateDoc, setDoc, query, where, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, doc, getDoc, getDocs, updateDoc, setDoc, query, where, orderBy, onSnapshot, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
         // CONFIGURATION
@@ -205,6 +282,7 @@
         // GLOBAL STATE
         let currentUser = null;
         let currentProject = null;
+        let isRevisionMode = false;
 
         // --- AUTH LOGIC ---
         window.signIn = () => {
@@ -241,91 +319,175 @@
             }
         });
 
-        // --- DASHBOARD LOGIC (UPDATED: Client-side sorting) ---
+        // --- DASHBOARD LOGIC ---
         window.showDashboard = () => {
             hideAllViews();
             document.getElementById('view-dashboard').classList.remove('hidden');
             loadDashboard();
         };
 
+        window.showArchived = () => {
+            hideAllViews();
+            document.getElementById('view-archived').classList.remove('hidden');
+            loadArchived();
+        };
+
         async function loadDashboard() {
             if(!currentUser) return;
 
-            // REMOVED 'orderBy' from query to prevent "Missing Index" errors
-            const qMyDocs = query(collection(db, "projects"), where("creatorId", "==", currentUser.uid));
-            onSnapshot(qMyDocs, (snapshot) => {
-                const container = document.getElementById('list-my-docs');
+            // 1. Team Projects (Public, All non-archived)
+            const qTeam = query(collection(db, "projects"));
+            onSnapshot(qTeam, (snapshot) => {
+                const container = document.getElementById('list-team-projects');
                 container.innerHTML = '';
-                if(snapshot.empty) {
-                    container.innerHTML = '<div class="p-4 text-center text-slate-400">You haven\'t created any documents yet.</div>';
-                    return;
-                }
                 
-                // Sort manually in JS
                 const docs = [];
-                snapshot.forEach(doc => docs.push({ id: doc.id, ...doc.data() }));
+                snapshot.forEach(doc => {
+                    const d = doc.data();
+                    if(d.status !== 'Archived') docs.push({ id: doc.id, ...d });
+                });
+                // Sort client-side
                 docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+                if(docs.length === 0) container.innerHTML = '<div class="p-8 text-center text-slate-400">No active projects.</div>';
                 
-                docs.forEach(data => renderDocCard(data, data.id, container, false));
+                docs.forEach(data => renderTeamRow(data, data.id, container));
             });
 
-            // REMOVED 'orderBy' from query here too
+            // 2. Assigned to Me (Filter: Reviewer == Me AND Not Approved/Archived)
             const qAssigned = query(collection(db, "projects"), where("reviewerId", "==", currentUser.uid));
             onSnapshot(qAssigned, (snapshot) => {
                 const container = document.getElementById('list-assigned-docs');
                 const badge = document.getElementById('badge-assigned');
                 container.innerHTML = '';
                 
-                if(snapshot.empty) {
-                    container.innerHTML = '<div class="p-4 text-center text-slate-400">No documents waiting for your review.</div>';
-                    badge.classList.add('hidden');
-                    return;
-                }
-                
-                // Sort manually in JS
                 const docs = [];
-                snapshot.forEach(doc => docs.push({ id: doc.id, ...doc.data() }));
+                snapshot.forEach(doc => {
+                    const d = doc.data();
+                    if(d.status !== 'Archived' && d.status !== 'Approved') {
+                        docs.push({ id: doc.id, ...d });
+                    }
+                });
                 docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
-                badge.innerText = docs.length;
-                badge.classList.remove('hidden');
-                docs.forEach(data => renderDocCard(data, data.id, container, true));
+                if(docs.length === 0) {
+                    container.innerHTML = '<div class="p-8 text-center text-slate-400">All caught up! No pending reviews.</div>';
+                    badge.classList.add('hidden');
+                } else {
+                    badge.innerText = docs.length;
+                    badge.classList.remove('hidden');
+                    docs.forEach(data => renderCard(data, data.id, container));
+                }
             });
         }
 
-        function renderDocCard(data, id, container, isAssigned) {
-            const div = document.createElement('div');
-            div.className = "p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition";
-            div.onclick = () => loadProject(id);
-            
-            let statusColor = "bg-slate-100 text-slate-600";
-            if(data.status === 'Approved') statusColor = "bg-green-100 text-green-700";
-            if(data.status === 'Archived') statusColor = "bg-slate-800 text-white";
-            if(data.status === 'Needs Review') statusColor = "bg-amber-100 text-amber-700";
-            if(data.status === 'Changes Requested') statusColor = "bg-red-100 text-red-700";
+        async function loadArchived() {
+            const qArchived = query(collection(db, "projects"), where("status", "==", "Archived"));
+            onSnapshot(qArchived, (snapshot) => {
+                const container = document.getElementById('list-archived-docs');
+                container.innerHTML = '';
+                if(snapshot.empty) {
+                    container.innerHTML = '<div class="p-8 text-center text-slate-400">No archived projects found.</div>';
+                    return;
+                }
+                const docs = [];
+                snapshot.forEach(doc => docs.push({ id: doc.id, ...doc.data() }));
+                docs.sort((a, b) => (b.archivedAt?.seconds || 0) - (a.archivedAt?.seconds || 0)); // Sort by archived date
+                
+                docs.forEach(data => renderTeamRow(data, data.id, container, true));
+            });
+        }
 
-            // Fallback for null dates
-            const dateStr = data.createdAt ? new Date(data.createdAt.toDate()).toLocaleDateString() : 'Just now';
+        function renderTeamRow(data, id, container, isArchived = false) {
+            const div = document.createElement('div');
+            div.className = "grid grid-cols-12 gap-4 p-4 border-b border-slate-100 hover:bg-slate-50 items-center transition group";
+            
+            // Only clickable on title/info to allow delete button to work separately
+            const navigate = () => loadProject(id);
+
+            let assignedHTML = `<span class="text-slate-400 italic text-xs">Unassigned</span>`;
+            if(data.reviewerName) assignedHTML = `<span class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-bold">${data.reviewerName}</span>`;
 
             div.innerHTML = `
-                <div>
-                    <div class="font-semibold text-slate-800">${data.title}</div>
-                    <div class="text-xs text-slate-500">${data.mediaType} • ${dateStr}</div>
+                <div class="col-span-5 cursor-pointer font-medium text-slate-800" onclick="loadProject('${id}')">${data.title} <span class="ml-2 text-xs font-normal text-slate-400">(${data.mediaType})</span></div>
+                <div class="col-span-3 cursor-pointer flex items-center gap-2 text-sm text-slate-600" onclick="loadProject('${id}')">
+                    <img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full border border-slate-200">
+                    ${data.creatorName.split(' ')[0]}
                 </div>
-                <div class="flex items-center gap-3">
-                    ${isAssigned ? `<img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full" title="Creator: ${data.creatorName}">` : ''}
-                    <span class="text-xs px-2 py-1 rounded-full font-bold ${statusColor}">${data.status}</span>
-                    <svg class="text-slate-300 w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                <div class="col-span-3 cursor-pointer" onclick="loadProject('${id}')">${assignedHTML}</div>
+                <div class="col-span-1 text-right">
+                    <button onclick="deleteProject('${id}', '${data.storagePath}')" class="text-slate-300 hover:text-red-500 p-2 rounded hover:bg-red-50 transition" title="Delete Project">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
                 </div>
             `;
             container.appendChild(div);
         }
 
+        function renderCard(data, id, container) {
+            const div = document.createElement('div');
+            div.className = "p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition bg-white";
+            div.onclick = () => loadProject(id);
+            
+            let statusColor = "bg-amber-100 text-amber-700"; // Default pending
+            if(data.status === 'Changes Requested') statusColor = "bg-red-100 text-red-700";
+
+            div.innerHTML = `
+                <div>
+                    <div class="font-semibold text-slate-800">${data.title}</div>
+                    <div class="text-xs text-slate-500">Waiting for you</div>
+                </div>
+                <span class="text-xs px-2 py-1 rounded-full font-bold ${statusColor}">${data.status}</span>
+            `;
+            container.appendChild(div);
+        }
+
+        // --- DELETION LOGIC ---
+        window.deleteProject = async (id, storagePath) => {
+            if(!confirm("⚠️ ARE YOU SURE? \n\nThis will permanently delete the project, all comments, and the file from the server. This action cannot be undone.")) return;
+
+            try {
+                // 1. Delete Firestore Doc
+                await deleteDoc(doc(db, "projects", id));
+                
+                // 2. Delete Storage File (if exists)
+                if(storagePath) {
+                    try {
+                        const fileRef = ref(storage, storagePath);
+                        await deleteObject(fileRef);
+                    } catch(e) { console.warn("File already gone or permission denied"); }
+                }
+                alert("Project deleted.");
+            } catch(e) {
+                alert("Error deleting: " + e.message);
+            }
+        };
+
         // --- UPLOAD LOGIC ---
-        window.startUpload = () => {
+        window.startUpload = (revisionMode = false) => {
+            isRevisionMode = revisionMode;
             hideAllViews();
             document.getElementById('view-wizard').classList.remove('hidden');
-            document.getElementById('input-title').value = '';
+            
+            const titleInput = document.getElementById('input-title');
+            const typeInput = document.getElementById('input-type');
+            
+            if(isRevisionMode && currentProject) {
+                document.getElementById('wizard-title').innerText = `Upload Revision for "${currentProject.title}"`;
+                titleInput.value = currentProject.title + " (v2)";
+                titleInput.disabled = true; // Lock title on revision
+                document.getElementById('title-group').classList.add('opacity-50');
+                document.getElementById('type-group').classList.add('hidden'); // Hide type selection
+                document.getElementById('btn-submit-project').innerText = "Analyze Revision & Submit";
+            } else {
+                document.getElementById('wizard-title').innerText = "Upload New Content";
+                titleInput.value = '';
+                titleInput.disabled = false;
+                document.getElementById('title-group').classList.remove('opacity-50');
+                document.getElementById('type-group').classList.remove('hidden');
+                document.getElementById('btn-submit-project').innerText = "Analyze & Save Project";
+            }
+            
             document.getElementById('file-upload').value = '';
             document.getElementById('file-preview-name').innerText = "Click to upload (Image/PDF/Doc)";
         };
@@ -338,7 +500,6 @@
                 fileToUpload = input.files[0];
                 document.getElementById('file-preview-name').innerText = fileToUpload.name;
                 document.getElementById('file-preview-name').classList.add('text-indigo-600', 'font-bold');
-                
                 const reader = new FileReader();
                 reader.onload = (e) => fileBase64 = e.target.result;
                 reader.readAsDataURL(fileToUpload);
@@ -347,59 +508,99 @@
 
         window.submitProject = async () => {
             const title = document.getElementById('input-title').value;
-            const type = document.getElementById('input-type').value;
-            const statusMsg = document.getElementById('upload-status');
+            const type = isRevisionMode ? currentProject.mediaType : document.getElementById('input-type').value;
             const btn = document.getElementById('btn-submit-project');
+            const statusMsg = document.getElementById('upload-status');
 
-            if(!title || !fileToUpload) return alert("Please fill all fields");
+            if(!fileToUpload) return alert("Please select a file");
 
             btn.disabled = true;
             statusMsg.classList.remove('hidden');
-            statusMsg.innerText = "Step 1/2: Analyzing with AI...";
+            statusMsg.innerText = isRevisionMode ? "Verifying fixes with AI..." : "Analyzing with AI...";
 
             try {
                 const contentRaw = fileBase64.split(',')[1];
                 const isBinary = fileToUpload.type.startsWith('image/') || fileToUpload.type === 'application/pdf';
 
+                let payload = {
+                    mode: 'analyze',
+                    content: contentRaw,
+                    mediaType: type,
+                    mimeType: fileToUpload.type,
+                    isBinary: isBinary
+                };
+
+                // REVISION LOGIC: Send accepted edits for verification
+                if(isRevisionMode && currentProject.aiSuggestions) {
+                    const acceptedEdits = currentProject.aiSuggestions.filter(s => s.status === 'accepted');
+                    if(acceptedEdits.length > 0) {
+                        payload.mode = 'verify';
+                        payload.expectedEdits = acceptedEdits;
+                    }
+                }
+
                 const aiResponse = await fetch('/.netlify/functions/proof-read', {
                     method: 'POST',
-                    body: JSON.stringify({
-                        mode: 'analyze',
-                        content: contentRaw,
-                        mediaType: type,
-                        mimeType: fileToUpload.type,
-                        isBinary: isBinary
-                    })
+                    body: JSON.stringify(payload)
                 });
 
                 if(!aiResponse.ok) throw new Error("AI Analysis failed");
-                const suggestions = await aiResponse.json();
+                let results = await aiResponse.json();
 
-                statusMsg.innerText = "Step 2/2: Saving to Database...";
+                statusMsg.innerText = "Saving to Database...";
 
-                // Upload to Storage
+                // Upload File
                 const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
                 await uploadString(storageRef, fileBase64, 'data_url');
                 const downloadURL = await getDownloadURL(storageRef);
 
-                // Save to DB with STORAGE PATH
-                const docRef = await addDoc(collection(db, "projects"), {
-                    title: title,
-                    mediaType: type,
-                    fileURL: downloadURL,
-                    storagePath: storageRef.fullPath, // Storing path for deletion later
-                    fileMime: fileToUpload.type,
-                    status: 'Draft',
-                    creatorId: currentUser.uid,
-                    creatorName: currentUser.displayName,
-                    creatorPhoto: currentUser.photoURL,
-                    createdAt: serverTimestamp(),
-                    aiSuggestions: suggestions,
-                    reviewerId: null,
-                    managerComments: ""
-                });
+                if(isRevisionMode) {
+                    // Update Existing Project
+                    // If Verify Mode, we merge results. Ideally, we should structure this better,
+                    // but for now let's append Verification results to comments or replace suggestions
+                    
+                    // Note: If 'verify' mode, results structure is different (fix/status/comment)
+                    // We will map this back to a standard format for display
+                    let newSuggestions = results;
+                    if(payload.mode === 'verify') {
+                        newSuggestions = results.map((r, i) => ({
+                            id: i,
+                            original: "Pending Fix", 
+                            fix: r.fix,
+                            reason: r.status === 'verified' ? "✅ Verified Fix" : "❌ Fix Failed",
+                            confidence: r.status === 'verified' ? 'High' : 'Low'
+                        }));
+                    }
 
-                loadProject(docRef.id);
+                    await updateDoc(doc(db, "projects", currentProject.id), {
+                        fileURL: downloadURL,
+                        storagePath: storageRef.fullPath, // Update path so we delete correct file later
+                        status: 'Needs Review', // Send back to reviewer
+                        aiSuggestions: newSuggestions,
+                        managerComments: "", // Clear old comments
+                        isRevision: true
+                    });
+                    loadProject(currentProject.id);
+
+                } else {
+                    // Create New
+                    const docRef = await addDoc(collection(db, "projects"), {
+                        title: title,
+                        mediaType: type,
+                        fileURL: downloadURL,
+                        storagePath: storageRef.fullPath,
+                        fileMime: fileToUpload.type,
+                        status: 'Draft',
+                        creatorId: currentUser.uid,
+                        creatorName: currentUser.displayName,
+                        creatorPhoto: currentUser.photoURL,
+                        createdAt: serverTimestamp(),
+                        aiSuggestions: results.map(r => ({...r, status: 'pending'})), // Init status
+                        reviewerId: null,
+                        managerComments: ""
+                    });
+                    loadProject(docRef.id);
+                }
 
             } catch(e) {
                 console.error(e);
@@ -419,6 +620,8 @@
                 if(docSnap.exists()) {
                     currentProject = { id: docSnap.id, ...docSnap.data() };
                     renderProjectView();
+                } else {
+                    showDashboard(); // Doc deleted
                 }
             });
         };
@@ -428,29 +631,58 @@
             document.getElementById('project-title-display').innerText = p.title;
             const badge = document.getElementById('project-status-badge');
             badge.innerText = p.status;
+            
+            const verifyBadge = document.getElementById('verification-badge');
+            if(p.isRevision) verifyBadge.classList.remove('hidden');
+            else verifyBadge.classList.add('hidden');
 
             // Render Document
             const container = document.getElementById('doc-container');
             container.innerHTML = '';
-            
             if(p.status === 'Archived') {
-                container.innerHTML = `<div class="p-12 text-center text-slate-500 italic">This project has been archived and the source file deleted.</div>`;
+                container.innerHTML = `<div class="p-12 text-center text-slate-500 italic flex flex-col items-center gap-4"><svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>Project Archived. File deleted.</div>`;
             } else if(p.fileMime && p.fileMime.startsWith('image/')) {
-                container.innerHTML = `<img src="${p.fileURL}" class="max-w-full h-auto mx-auto shadow">`;
+                container.innerHTML = `<img src="${p.fileURL}" class="max-w-full h-auto mx-auto shadow rounded">`;
             } else if(p.fileMime === 'application/pdf') {
-                container.innerHTML = `<iframe src="${p.fileURL}" class="w-full h-full border-0"></iframe>`;
+                container.innerHTML = `<iframe src="${p.fileURL}" class="w-full h-full border-0 rounded"></iframe>`;
             } else {
-                container.innerHTML = `<div class="p-4 whitespace-pre-wrap">File content available.</div>`;
+                container.innerHTML = `<div class="p-4 whitespace-pre-wrap">Content available.</div>`;
             }
 
-            // Render AI Suggestions
+            // Render AI Suggestions (With Accept/Reject)
             const list = document.getElementById('ai-feedback-list');
             list.innerHTML = '';
-            (p.aiSuggestions || []).forEach(s => {
+            
+            const isReviewer = p.reviewerId === currentUser.uid;
+            const canEdit = p.creatorId === currentUser.uid || isReviewer;
+
+            (p.aiSuggestions || []).forEach((s, index) => {
+                let statusClass = 'status-pending border-l-slate-300';
+                if(s.status === 'accepted') statusClass = 'status-accepted';
+                if(s.status === 'rejected') statusClass = 'status-rejected';
+
+                let buttonsHTML = '';
+                if(canEdit && p.status !== 'Archived' && p.status !== 'Approved') {
+                    buttonsHTML = `
+                        <div class="flex gap-2 mt-2">
+                            <button onclick="updateSuggestion(${index}, 'accepted')" class="flex-1 bg-white border border-green-200 text-green-700 hover:bg-green-50 text-xs py-1.5 rounded font-bold transition">Accept</button>
+                            <button onclick="updateSuggestion(${index}, 'rejected')" class="flex-1 bg-white border border-red-200 text-red-700 hover:bg-red-50 text-xs py-1.5 rounded font-bold transition">Reject</button>
+                        </div>
+                    `;
+                }
+
                 list.innerHTML += `
-                    <div class="border border-slate-200 rounded p-3 bg-white text-sm mb-2">
-                        <div class="text-slate-400 text-xs font-bold uppercase mb-1">${s.reason}</div>
-                        <div class="mb-1"><span class="line-through text-red-400">${s.original}</span> -> <span class="text-green-600 font-bold">${s.fix}</span></div>
+                    <div class="suggestion-card border border-slate-200 rounded p-4 bg-white text-sm shadow-sm ${statusClass}">
+                        <div class="flex justify-between mb-1">
+                            <span class="text-slate-400 text-[10px] font-bold uppercase tracking-wide">${s.reason}</span>
+                            ${s.status !== 'pending' ? `<span class="text-[10px] font-bold uppercase ${s.status === 'accepted' ? 'text-green-600' : 'text-red-500'}">${s.status}</span>` : ''}
+                        </div>
+                        <div class="mb-2 text-base">
+                            <span class="line-through text-red-400 decoration-2">${s.original}</span> 
+                            <span class="text-slate-400 mx-1">→</span> 
+                            <span class="text-green-600 font-bold bg-green-50 px-1 rounded">${s.fix}</span>
+                        </div>
+                        ${buttonsHTML}
                     </div>
                 `;
             });
@@ -462,52 +694,61 @@
             actions.innerHTML = '';
 
             const isCreator = p.creatorId === currentUser.uid;
-            const isReviewer = p.reviewerId === currentUser.uid;
 
             if(isCreator && p.status === 'Draft') {
-                actions.innerHTML = `<button onclick="openAssignModal()" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700">Assign Reviewer</button>`;
+                actions.innerHTML = `<button onclick="openAssignModal()" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 font-bold shadow-sm">Assign Reviewer</button>`;
             } else if(isCreator && p.status === 'Changes Requested') {
-                actions.innerHTML = `<button onclick="startUpload()" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm">Upload Revision</button>`;
+                actions.innerHTML = `<button onclick="startUpload(true)" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-bold shadow-sm">Upload Revision</button>`;
             } else if(isReviewer && p.status === 'Needs Review') {
                 document.getElementById('manager-input').classList.remove('hidden');
                 document.getElementById('manager-input').value = p.managerComments || "";
                 
                 actions.innerHTML = `
-                    <button onclick="submitReview('Changes Requested')" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded text-sm hover:bg-red-50">Request Changes</button>
-                    <button onclick="submitReview('Approved')" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700">Approve Concept</button>
+                    <button onclick="submitReview('Changes Requested')" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded text-sm hover:bg-red-50 font-bold">Request Changes</button>
+                    <button onclick="openChecklist()" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 font-bold shadow-sm">Approve Concept</button>
                 `;
             } else if (p.status === 'Approved') {
                  if (isCreator || isReviewer) {
-                     actions.innerHTML = `<button onclick="finalizeProject()" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-900 shadow-lg">Final Commit (Archive)</button>`;
+                     actions.innerHTML = `<button onclick="finalizeProject()" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-900 shadow-lg font-bold">Final Commit (Archive)</button>`;
                  }
             }
         }
+
+        // --- INTERACTION LOGIC ---
+        window.updateSuggestion = async (index, status) => {
+            // Update local object then push to DB
+            const newSuggestions = [...currentProject.aiSuggestions];
+            newSuggestions[index].status = status;
+            
+            await updateDoc(doc(db, "projects", currentProject.id), {
+                aiSuggestions: newSuggestions
+            });
+        };
 
         // --- ASSIGN LOGIC ---
         window.openAssignModal = async () => {
             document.getElementById('modal-assign').classList.remove('hidden');
             const list = document.getElementById('user-list-container');
-            list.innerHTML = 'Loading users...';
+            list.innerHTML = '<div class="col-span-3 text-center text-slate-400">Loading users...</div>';
             
             const snaps = await getDocs(collection(db, "users"));
             list.innerHTML = '';
             
             snaps.forEach(docSnap => {
                 const u = docSnap.data();
-                if(u.uid === currentUser.uid) return;
-
+                // Filter out self if desired, or keep to allow self-assign
                 const div = document.createElement('div');
-                div.className = "user-bubble cursor-pointer flex flex-col items-center p-2 rounded-xl border border-transparent transition";
+                div.className = "user-bubble cursor-pointer flex flex-col items-center p-3 rounded-xl border border-transparent transition bg-slate-50 hover:bg-white hover:shadow-md";
                 div.onclick = () => assignUser(u);
                 div.innerHTML = `
-                    <img src="${u.photoURL}" class="w-12 h-12 rounded-full mb-2 border border-slate-200">
-                    <span class="text-xs font-bold text-center leading-tight">${u.displayName ? u.displayName.split(' ')[0] : 'User'}</span>
+                    <img src="${u.photoURL}" class="w-12 h-12 rounded-full mb-2 border-2 border-white shadow-sm">
+                    <span class="text-xs font-bold text-center leading-tight text-slate-700">${u.displayName ? u.displayName.split(' ')[0] : 'User'}</span>
                 `;
                 list.appendChild(div);
             });
         };
 
-        window.closeModal = () => document.getElementById('modal-assign').classList.add('hidden');
+        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
 
         async function assignUser(user) {
             if(!confirm(`Assign ${user.displayName} as reviewer?`)) return;
@@ -517,49 +758,58 @@
                 reviewerName: user.displayName,
                 status: 'Needs Review'
             });
-            closeModal();
-            alert("Assigned!");
+            closeModal('modal-assign');
         }
 
-        // --- REVIEW LOGIC ---
+        // --- CHECKLIST & APPROVAL LOGIC ---
+        window.openChecklist = () => {
+            document.getElementById('modal-checklist').classList.remove('hidden');
+            // Reset checkboxes
+            document.querySelectorAll('.approval-check').forEach(c => c.checked = false);
+            document.getElementById('btn-confirm-approve').disabled = true;
+        };
+
+        window.validateChecklist = () => {
+            const allChecked = Array.from(document.querySelectorAll('.approval-check')).every(c => c.checked);
+            document.getElementById('btn-confirm-approve').disabled = !allChecked;
+        };
+
+        window.executeApproval = () => {
+            submitReview('Approved');
+            closeModal('modal-checklist');
+        };
+
         window.submitReview = async (status) => {
             const comments = document.getElementById('manager-input').value;
             await updateDoc(doc(db, "projects", currentProject.id), {
                 status: status,
                 managerComments: comments
             });
-            alert(`Project marked as ${status}`);
         };
 
-        // --- FINAL COMMIT & DELETE LOGIC ---
         window.finalizeProject = async () => {
             if(!confirm("Confirm Final Approval? This will archive the project and DELETE the source file from the server to save storage space.")) return;
-            
             try {
-                // 1. Delete file from Storage if path exists
                 if(currentProject.storagePath) {
                     const fileRef = ref(storage, currentProject.storagePath);
                     await deleteObject(fileRef);
                 }
-
-                // 2. Update DB
                 await updateDoc(doc(db, "projects", currentProject.id), {
                     status: 'Archived',
-                    fileURL: null, // Clear link
+                    fileURL: null, 
                     archivedAt: serverTimestamp()
                 });
-                
                 alert("Project finalized. Source file deleted.");
                 showDashboard();
             } catch (e) {
                 console.error(e);
-                alert("Error deleting file: " + e.message);
+                alert("Error: " + e.message);
             }
         };
 
         // HELPER
         function hideAllViews() {
-            const views = ['view-login', 'view-dashboard', 'view-wizard', 'view-project'];
+            const views = ['view-login', 'view-dashboard', 'view-wizard', 'view-project', 'view-archived'];
             views.forEach(id => document.getElementById(id).classList.add('hidden'));
         }
 
