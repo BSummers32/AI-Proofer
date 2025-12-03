@@ -79,7 +79,7 @@
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 </div>
                 <h3 class="text-xl font-medium" id="upload-text">Click to Upload Document</h3>
-                <p class="text-slate-500 mt-2">.TXT (for real text) or PDF/JPG (uses sample text)</p>
+                <p class="text-slate-500 mt-2">PDF, DOCX, JPG, PNG, TXT</p>
                 <input type="file" id="file-input" class="hidden" onchange="handleFileSelect(this)">
             </div>
 
@@ -104,7 +104,7 @@
                     <div class="bg-white min-h-[800px] p-12 rounded shadow-lg max-w-3xl mx-auto">
                         <h1 class="text-3xl font-bold mb-2" id="doc-title">Document Preview</h1>
                         <p class="text-xs text-slate-400 uppercase tracking-widest mb-8 border-b pb-4">Analyzed Content</p>
-                        <div id="doc-content" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap">
+                        <div id="doc-wrapper" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap">
                             <!-- Content injected by JS -->
                         </div>
                     </div>
@@ -153,7 +153,7 @@
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                             New Version (Corrected)
                         </p>
-                        <div id="verify-doc-content" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap"></div>
+                        <div id="verify-doc-wrapper" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap"></div>
                     </div>
                 </div>
 
@@ -218,11 +218,11 @@
         // --- DATA ---
         let currentStage = 1;
         let currentMediaType = null;
-        let documentContent = "";
+        let selectedFile = null;
+        let fileContent = null; // Base64 data or text
+        let fileMimeType = null;
+        let isBinaryFile = false;
         let currentEdits = [];
-
-        // Sample text for non-text files in this demo
-        const SAMPLE_TEXT = "Welcome to out new store! We are open form 9am to 9pm everyday. Failure to comply may result in disiplinary action. Its gonna be a great day.";
 
         // --- NAVIGATION ---
         function canNavigate(targetStage) {
@@ -263,26 +263,38 @@
         function handleFileSelect(input) {
             const file = input.files[0];
             if (!file) return;
+            selectedFile = file;
+            fileMimeType = file.type;
 
             document.getElementById('upload-text').innerText = `Selected: ${file.name}`;
             document.getElementById('upload-text').classList.add('text-green-600', 'font-bold');
-            
-            // Simple logic: If text file, read it. If binary, use sample.
+
             const reader = new FileReader();
-            if(file.type === "text/plain") {
-                reader.onload = (e) => documentContent = e.target.result;
-                reader.readAsText(file);
+
+            // Determine if binary (PDF/Image) or Text
+            if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+                isBinaryFile = true;
+                reader.onload = (e) => {
+                    // Extract base64 part only
+                    const result = e.target.result;
+                    fileContent = result.split(',')[1]; 
+                    checkUploadReady();
+                };
+                reader.readAsDataURL(file);
             } else {
-                // For PDF/Images in this demo, use sample text to prove API works
-                documentContent = SAMPLE_TEXT; 
+                // Assume text
+                isBinaryFile = false;
+                reader.onload = (e) => {
+                    fileContent = e.target.result;
+                    checkUploadReady();
+                };
+                reader.readAsText(file);
             }
-            
-            checkUploadReady();
         }
 
         function checkUploadReady() {
             const btn = document.getElementById('btn-analyze');
-            if(currentMediaType && documentContent) {
+            if(currentMediaType && fileContent) {
                 btn.disabled = false;
                 btn.classList.remove('bg-slate-300', 'cursor-not-allowed');
                 btn.classList.add('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-lg');
@@ -290,41 +302,31 @@
         }
 
         async function runAnalysis() {
-            // Show Loading
             document.getElementById('loading-indicator').classList.remove('hidden');
             document.getElementById('btn-analyze').classList.add('hidden');
             document.getElementById('error-msg').classList.add('hidden');
 
             try {
-                // CALL NETLIFY FUNCTION
                 const response = await fetch('/.netlify/functions/proof-read', {
                     method: 'POST',
                     body: JSON.stringify({ 
-                        content: documentContent,
-                        mediaType: currentMediaType 
+                        content: fileContent,
+                        mediaType: currentMediaType,
+                        mimeType: fileMimeType,
+                        isBinary: isBinaryFile
                     })
                 });
 
                 if (!response.ok) throw new Error("API Connection Failed");
 
                 const suggestions = await response.json();
-                
-                // Add status to each suggestion
                 currentEdits = suggestions.map(s => ({ ...s, status: 'pending' }));
                 
                 goToStage(2);
             } catch (err) {
                 console.error(err);
-                document.getElementById('error-msg').innerText = "Error: Could not connect to AI. Ensure Netlify Function is running.";
+                document.getElementById('error-msg').innerText = "Error: Could not connect to AI. Check console.";
                 document.getElementById('error-msg').classList.remove('hidden');
-                
-                // FALLBACK FOR DEMO if API fails (so you can still see UI)
-                console.log("Using fallback data due to error");
-                currentEdits = [
-                    { id: 99, original: "out", fix: "our", reason: "Fallback Mock", status: 'pending' },
-                    { id: 98, original: "disiplinary", fix: "disciplinary", reason: "Fallback Mock", status: 'pending' }
-                ];
-                goToStage(2);
             } finally {
                 document.getElementById('loading-indicator').classList.add('hidden');
                 document.getElementById('btn-analyze').classList.remove('hidden');
@@ -334,22 +336,36 @@
         // --- STAGE 2: REVIEW ---
         function renderReview() {
             document.getElementById('doc-title').innerText = selectedFile ? selectedFile.name : "Document";
-            
-            // 1. Render Content with Highlights
-            let htmlContent = documentContent;
-            // escape html to prevent injection (basic)
-            htmlContent = htmlContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const wrapper = document.getElementById('doc-wrapper');
+            wrapper.innerHTML = '';
 
-            currentEdits.forEach(edit => {
-                // Find and replace text with span. Note: This simple string replace 
-                // replaces ALL occurrences. In a production app, use strict indexing.
-                const regex = new RegExp(`(${escapeRegExp(edit.original)})`, 'g');
-                htmlContent = htmlContent.replace(regex, `<span id="highlight-${edit.id}" class="highlight" onclick="focusSuggestion(${edit.id})">$1</span>`);
-            });
-            
-            document.getElementById('doc-content').innerHTML = htmlContent;
+            // If binary, show the image/pdf object
+            if (isBinaryFile) {
+                if (fileMimeType.startsWith('image/')) {
+                    const img = document.createElement('img');
+                    img.src = `data:${fileMimeType};base64,${fileContent}`;
+                    img.className = "max-w-full h-auto border border-slate-300 shadow-sm";
+                    wrapper.appendChild(img);
+                } else if (fileMimeType === 'application/pdf') {
+                    const iframe = document.createElement('iframe');
+                    iframe.src = `data:${fileMimeType};base64,${fileContent}`;
+                    iframe.className = "w-full h-[600px] border border-slate-300";
+                    wrapper.appendChild(iframe);
+                }
+            } else {
+                // Text mode with highlighting
+                let htmlContent = fileContent;
+                // Escape HTML
+                htmlContent = htmlContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                
+                currentEdits.forEach(edit => {
+                    const regex = new RegExp(`(${escapeRegExp(edit.original)})`, 'g');
+                    htmlContent = htmlContent.replace(regex, `<span id="highlight-${edit.id}" class="highlight" onclick="focusSuggestion(${edit.id})">$1</span>`);
+                });
+                wrapper.innerHTML = htmlContent;
+            }
 
-            // 2. Render Suggestions List
+            // Render Suggestions List
             const list = document.getElementById('suggestions-list');
             list.innerHTML = '';
             
@@ -357,7 +373,8 @@
                 const item = document.createElement('div');
                 item.id = `suggestion-${edit.id}`;
                 item.className = `border rounded-lg p-4 bg-white transition cursor-pointer mb-4 ${getSuggestionClass(edit.status)}`;
-                item.onclick = () => focusHighlight(edit.id);
+                // Only highlight in text mode
+                if(!isBinaryFile) item.onclick = () => focusHighlight(edit.id);
                 
                 item.innerHTML = `
                     <div class="text-xs font-bold text-slate-400 uppercase mb-1">${edit.reason}</div>
@@ -420,24 +437,37 @@
                 document.getElementById('verify-upload-view').classList.add('hidden');
                 document.getElementById('verify-split-view').classList.remove('hidden');
                 document.getElementById('verify-split-view').classList.add('flex');
-                renderVerifySplit();
+                
+                // For simplicity in this demo, we assume the user uploaded the corrected text file
+                // If it's a binary file, we just show it. 
+                const file = input.files[0];
+                const reader = new FileReader();
+
+                reader.onload = (e) => {
+                    const wrapper = document.getElementById('verify-doc-wrapper');
+                    wrapper.innerHTML = '';
+                    
+                    if(file.type.startsWith('image/')) {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = "max-w-full h-auto border border-slate-300 shadow-sm";
+                        wrapper.appendChild(img);
+                    } else if(file.type === 'application/pdf') {
+                        const iframe = document.createElement('iframe');
+                        iframe.src = e.target.result;
+                        iframe.className = "w-full h-[600px] border border-slate-300";
+                        wrapper.appendChild(iframe);
+                    } else {
+                         wrapper.innerText = e.target.result;
+                    }
+                    
+                    renderVerifyList();
+                };
+                reader.readAsDataURL(file); // Read as Data URL for all types for ease of display
             }
         }
 
-        function renderVerifySplit() {
-            document.getElementById('verify-doc-title').innerText = selectedFile ? selectedFile.name : "Document";
-
-            // Generate "Clean" content for verification view
-            let cleanContent = documentContent;
-            currentEdits.forEach(edit => {
-                if(edit.status === 'accepted') {
-                    // Simple replace for demo
-                    cleanContent = cleanContent.replace(edit.original, edit.fix);
-                }
-            });
-            document.getElementById('verify-doc-content').innerText = cleanContent;
-
-            // Render List
+        function renderVerifyList() {
             const list = document.getElementById('verification-list');
             list.innerHTML = '';
             
@@ -446,7 +476,6 @@
                     setTimeout(() => {
                         const div = document.createElement('div');
                         div.className = "border-b border-slate-100 pb-3 last:border-0";
-                        
                         let icon = '', text = '', sub = '';
 
                         if(edit.status === 'accepted') {
