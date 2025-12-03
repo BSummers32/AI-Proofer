@@ -241,7 +241,7 @@
             }
         });
 
-        // --- DASHBOARD LOGIC ---
+        // --- DASHBOARD LOGIC (UPDATED: Client-side sorting) ---
         window.showDashboard = () => {
             hideAllViews();
             document.getElementById('view-dashboard').classList.remove('hidden');
@@ -251,7 +251,8 @@
         async function loadDashboard() {
             if(!currentUser) return;
 
-            const qMyDocs = query(collection(db, "projects"), where("creatorId", "==", currentUser.uid), orderBy("createdAt", "desc"));
+            // REMOVED 'orderBy' from query to prevent "Missing Index" errors
+            const qMyDocs = query(collection(db, "projects"), where("creatorId", "==", currentUser.uid));
             onSnapshot(qMyDocs, (snapshot) => {
                 const container = document.getElementById('list-my-docs');
                 container.innerHTML = '';
@@ -259,10 +260,17 @@
                     container.innerHTML = '<div class="p-4 text-center text-slate-400">You haven\'t created any documents yet.</div>';
                     return;
                 }
-                snapshot.forEach(doc => renderDocCard(doc.data(), doc.id, container, false));
+                
+                // Sort manually in JS
+                const docs = [];
+                snapshot.forEach(doc => docs.push({ id: doc.id, ...doc.data() }));
+                docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                
+                docs.forEach(data => renderDocCard(data, data.id, container, false));
             });
 
-            const qAssigned = query(collection(db, "projects"), where("reviewerId", "==", currentUser.uid), orderBy("createdAt", "desc"));
+            // REMOVED 'orderBy' from query here too
+            const qAssigned = query(collection(db, "projects"), where("reviewerId", "==", currentUser.uid));
             onSnapshot(qAssigned, (snapshot) => {
                 const container = document.getElementById('list-assigned-docs');
                 const badge = document.getElementById('badge-assigned');
@@ -274,9 +282,14 @@
                     return;
                 }
                 
-                badge.innerText = snapshot.size;
+                // Sort manually in JS
+                const docs = [];
+                snapshot.forEach(doc => docs.push({ id: doc.id, ...doc.data() }));
+                docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+
+                badge.innerText = docs.length;
                 badge.classList.remove('hidden');
-                snapshot.forEach(doc => renderDocCard(doc.data(), doc.id, container, true));
+                docs.forEach(data => renderDocCard(data, data.id, container, true));
             });
         }
 
@@ -291,10 +304,13 @@
             if(data.status === 'Needs Review') statusColor = "bg-amber-100 text-amber-700";
             if(data.status === 'Changes Requested') statusColor = "bg-red-100 text-red-700";
 
+            // Fallback for null dates
+            const dateStr = data.createdAt ? new Date(data.createdAt.toDate()).toLocaleDateString() : 'Just now';
+
             div.innerHTML = `
                 <div>
                     <div class="font-semibold text-slate-800">${data.title}</div>
-                    <div class="text-xs text-slate-500">${data.mediaType} • ${new Date(data.createdAt?.toDate()).toLocaleDateString()}</div>
+                    <div class="text-xs text-slate-500">${data.mediaType} • ${dateStr}</div>
                 </div>
                 <div class="flex items-center gap-3">
                     ${isAssigned ? `<img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full" title="Creator: ${data.creatorName}">` : ''}
@@ -485,7 +501,7 @@
                 div.onclick = () => assignUser(u);
                 div.innerHTML = `
                     <img src="${u.photoURL}" class="w-12 h-12 rounded-full mb-2 border border-slate-200">
-                    <span class="text-xs font-bold text-center leading-tight">${u.displayName.split(' ')[0]}</span>
+                    <span class="text-xs font-bold text-center leading-tight">${u.displayName ? u.displayName.split(' ')[0] : 'User'}</span>
                 `;
                 list.appendChild(div);
             });
