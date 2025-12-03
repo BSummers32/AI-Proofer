@@ -3,716 +3,550 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ProoferAI</title>
+    <title>ProoferAI - Enterprise</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; }
-        
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        .highlight { background-color: rgba(253, 224, 71, 0.5); border-bottom: 2px solid #eab308; cursor: pointer; transition: all 0.2s; }
-        .highlight:hover { background-color: rgba(234, 179, 8, 0.6); }
-        .highlight.active { background-color: rgba(234, 179, 8, 0.8); border-bottom: 3px solid #ca8a04; font-weight: bold; }
-        
-        .status-accepted { background-color: #dcfce7; border-color: #22c55e; } 
-        .status-rejected { background-color: #fee2e2; border-color: #ef4444; } 
-        
-        .hidden-stage { display: none !important; }
-        .nav-item { cursor: pointer; transition: color 0.2s; }
-        .nav-item:hover { color: #4f46e5; }
-
-        /* Visual Diff Slider Styles */
-        .diff-container { position: relative; width: 100%; height: 600px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 0.5rem; }
-        .diff-img { position: absolute; top: 0; left: 0; height: 100%; width: 100%; object-fit: contain; object-position: left top;}
-        .diff-resize { position: absolute; top: 0; left: 0; height: 100%; width: 50%; overflow: hidden; border-right: 2px solid #4f46e5; z-index: 10; }
-        .diff-handle { position: absolute; bottom: 0; right: -12px; width: 24px; height: 24px; background: #4f46e5; border-radius: 50%; cursor: ew-resize; z-index: 20; display: flex; align-items: center; justify-content: center; color: white; top: 50%; transform: translateY(-50%); }
+        .user-bubble:hover { transform: scale(1.05); border-color: #4f46e5; }
+        .scroller::-webkit-scrollbar { width: 6px; }
+        .scroller::-webkit-scrollbar-track { background: #f1f1f1; }
+        .scroller::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 h-screen flex flex-col overflow-hidden">
 
-    <!-- Navigation -->
-    <nav class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
-        <div class="flex items-center gap-2 cursor-pointer" onclick="location.reload()">
-            <div class="bg-indigo-600 p-2 rounded-lg text-white">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>
+    <!-- LOGIN SCREEN -->
+    <div id="view-login" class="absolute inset-0 z-50 bg-white flex flex-col items-center justify-center fade-in">
+        <div class="text-center max-w-md px-6">
+            <div class="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-200">
+                <svg class="text-white w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </div>
-            <span class="font-bold text-xl text-slate-800">Proofer<span class="text-indigo-600">AI</span></span>
+            <h1 class="text-3xl font-bold text-slate-900 mb-2">ProoferAI Enterprise</h1>
+            <p class="text-slate-500 mb-8">Collaborative content approval for teams.</p>
+            <button onclick="signIn()" class="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-3 px-4 rounded-xl transition shadow-sm">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5" alt="G">
+                Sign in with Google Workspace
+            </button>
+            <p id="login-error" class="text-red-500 text-sm mt-4 hidden"></p>
         </div>
+    </div>
+
+    <!-- MAIN APP LAYOUT (Hidden until login) -->
+    <div id="view-app" class="hidden h-full flex flex-col">
         
-        <div class="flex gap-4 text-sm font-medium select-none">
-            <span id="nav-1" onclick="if(canNavigate(1)) goToStage(1)" class="nav-item text-indigo-600 font-bold border-b-2 border-indigo-600">1. Upload</span>
-            <span id="nav-2" onclick="if(canNavigate(2)) goToStage(2)" class="nav-item text-slate-400">2. Review</span>
-            <span id="nav-3" onclick="if(canNavigate(3)) goToStage(3)" class="nav-item text-slate-400">3. Verify</span>
-            <span id="nav-4" onclick="if(canNavigate(4)) goToStage(4)" class="nav-item text-slate-400">4. Approve</span>
-        </div>
-    </nav>
-
-    <!-- Main Content Area -->
-    <main class="flex-1 overflow-auto relative p-6">
-
-        <!-- STAGE 1: UPLOAD -->
-        <div id="stage-1" class="max-w-5xl mx-auto fade-in pt-10 pb-10">
-            <div class="text-center mb-10">
-                <h2 class="text-3xl font-bold mb-2">Start Proofing Session</h2>
-                <p class="text-slate-600">Select media type and context to calibrate the AI.</p>
-            </div>
-
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                <button onclick="selectMedia('signage')" class="media-btn p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 bg-white text-left transition" id="btn-signage">
-                    <div class="font-bold mb-1">Printed Signage</div>
-                    <div class="text-xs text-slate-500">Clarity & Impact</div>
-                </button>
-                <button onclick="selectMedia('social')" class="media-btn p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 bg-white text-left transition" id="btn-social">
-                    <div class="font-bold mb-1">Social Media</div>
-                    <div class="text-xs text-slate-500">Engaging & Casual</div>
-                </button>
-                <button onclick="selectMedia('policy')" class="media-btn p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 bg-white text-left transition" id="btn-policy">
-                    <div class="font-bold mb-1">Policy & Proc.</div>
-                    <div class="text-xs text-slate-500">Formal & Precise</div>
-                </button>
-                <button onclick="selectMedia('digital')" class="media-btn p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 bg-white text-left transition" id="btn-digital">
-                    <div class="font-bold mb-1">Digital Content</div>
-                    <div class="text-xs text-slate-500">SEO & Structure</div>
-                </button>
-            </div>
-
-            <!-- Advanced Context Settings -->
-            <div class="bg-indigo-50 rounded-xl p-6 mb-8 border border-indigo-100">
-                <h3 class="font-bold text-indigo-900 mb-4 flex items-center gap-2">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                    Advanced AI Context
-                </h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-sm font-medium text-indigo-800 mb-1">Target Audience</label>
-                        <input type="text" id="target-audience" placeholder="e.g., Senior Executives, Gen Z, Medical Professionals" 
-                            class="w-full p-2 rounded border border-indigo-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-indigo-800 mb-1">Brand Style Guide (Optional)</label>
-                        <textarea id="style-guide" rows="1" placeholder="e.g., Use Oxford commas, avoid passive voice, authoritative tone." 
-                            class="w-full p-2 rounded border border-indigo-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"></textarea>
-                    </div>
+        <!-- NAVBAR -->
+        <nav class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm z-40">
+            <div class="flex items-center gap-2 cursor-pointer" onclick="showDashboard()">
+                <div class="bg-indigo-600 p-1.5 rounded text-white">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
                 </div>
+                <span class="font-bold text-lg text-slate-800">Proofer<span class="text-indigo-600">AI</span></span>
             </div>
-
-            <div class="border-2 border-dashed border-slate-300 rounded-2xl p-12 text-center bg-white hover:bg-slate-50 transition cursor-pointer" onclick="document.getElementById('file-input').click()">
-                <div class="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden md:block">
+                    <div id="user-name" class="text-sm font-bold text-slate-700">User</div>
+                    <div id="user-email" class="text-xs text-slate-500">email@example.com</div>
                 </div>
-                <h3 class="text-xl font-medium" id="upload-text">Click to Upload Document</h3>
-                <p class="text-slate-500 mt-2">PDF, DOCX, JPG, PNG, TXT</p>
-                <input type="file" id="file-input" class="hidden" onchange="handleFileSelect(this)">
+                <img id="user-avatar" src="" class="w-9 h-9 rounded-full border border-slate-200" alt="Avatar">
+                <button onclick="logout()" class="text-sm text-red-500 hover:underline">Sign Out</button>
             </div>
+        </nav>
 
-            <div class="mt-8 flex justify-end items-center gap-4">
-                 <div id="loading-indicator" class="hidden text-indigo-600 font-medium flex items-center gap-2">
-                    <div class="animate-spin h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-                    analyzing with Gemini AI...
-                </div>
-                <button onclick="runAnalysis()" id="btn-analyze" disabled class="px-8 py-3 rounded-lg font-semibold text-white bg-slate-300 cursor-not-allowed transition">
-                    Analyze Document
-                </button>
-            </div>
-            
-            <p id="error-msg" class="text-red-500 text-center mt-4 hidden"></p>
-        </div>
-
-        <!-- STAGE 2: REVIEW -->
-        <div id="stage-2" class="hidden-stage h-full fade-in">
-            <div class="flex h-full gap-6">
-                <!-- Document Preview (Left) -->
-                <div class="w-2/3 bg-slate-200 rounded-xl p-8 overflow-y-auto shadow-inner">
-                    <div class="bg-white min-h-[800px] p-12 rounded shadow-lg max-w-3xl mx-auto">
-                        <h1 class="text-3xl font-bold mb-2" id="doc-title">Document Preview</h1>
-                        <p class="text-xs text-slate-400 uppercase tracking-widest mb-8 border-b pb-4">Analyzed Content</p>
-                        <div id="doc-wrapper" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap"></div>
-                    </div>
+        <!-- DASHBOARD VIEW -->
+        <div id="view-dashboard" class="flex-1 overflow-auto p-8 fade-in">
+            <div class="max-w-6xl mx-auto">
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-2xl font-bold text-slate-800">Dashboard</h2>
+                    <button onclick="startUpload()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-md flex items-center gap-2">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                        New Document
+                    </button>
                 </div>
 
-                <!-- Suggestions (Right) -->
-                <div class="w-1/3 bg-white rounded-xl border border-slate-200 flex flex-col shadow-sm">
-                    <div class="p-4 border-b bg-slate-50">
-                        <h3 class="font-bold flex items-center gap-2">
-                            <span class="bg-red-100 text-red-600 p-1 rounded">!</span> AI Suggestions
-                        </h3>
-                    </div>
-                    <div class="flex-1 overflow-y-auto p-4 space-y-4" id="suggestions-list"></div>
-                    <div class="p-4 border-t bg-slate-50">
-                        <button onclick="goToStage(3)" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700">
-                            Save & Proceed
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- STAGE 3: RE-UPLOAD & VERIFY -->
-        <div id="stage-3" class="hidden-stage h-full fade-in">
-            <div id="verify-upload-view" class="max-w-2xl mx-auto pt-16 text-center">
-                <h2 class="text-2xl font-bold mb-2">Upload Corrected Document</h2>
-                <p class="text-slate-600 mb-8">Please upload the file with the changes applied.</p>
-
-                <div class="bg-white p-8 rounded-xl shadow border border-slate-200 cursor-pointer hover:bg-slate-50" onclick="document.getElementById('verify-input').click()">
-                    <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    </div>
-                    <p class="font-medium text-slate-700">Click to upload corrected file</p>
-                    <input type="file" id="verify-input" class="hidden" onchange="startVerificationFlow(this)">
-                </div>
-                
-                <div id="verify-loading" class="hidden mt-6 flex justify-center items-center gap-3">
-                    <div class="animate-spin h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
-                    <span class="text-indigo-600 font-medium">AI is verifying changes...</span>
-                </div>
-                
-                <p id="verify-error-msg" class="text-red-600 bg-red-50 p-3 rounded border border-red-200 text-center mt-4 hidden font-medium"></p>
-            </div>
-
-            <div id="verify-split-view" class="hidden h-full gap-6">
-                <!-- Visual Diff / New Document Preview -->
-                <div class="w-2/3 bg-slate-200 rounded-xl p-8 overflow-y-auto shadow-inner">
-                    <div class="bg-white min-h-[800px] p-8 rounded shadow-lg max-w-3xl mx-auto flex flex-col">
-                        <div class="flex justify-between items-center mb-6 pb-4 border-b">
-                            <h1 class="text-xl font-bold" id="verify-doc-title">Verification Mode</h1>
-                            <div id="diff-toggle-msg" class="text-xs font-bold text-indigo-600 uppercase tracking-widest hidden">Visual Diff Active</div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- My Documents -->
+                    <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden h-[500px] flex flex-col">
+                        <div class="p-4 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700">Created by Me</div>
+                        <div id="list-my-docs" class="flex-1 overflow-y-auto p-2 scroller">
+                            <div class="p-8 text-center text-slate-400">Loading docs...</div>
                         </div>
-                        
-                        <!-- Diff Container for Images/PDFs -->
-                        <div id="diff-container-wrapper" class="hidden flex-1 relative">
-                             <p class="text-sm text-slate-500 mb-2 text-center">Drag slider to compare Original vs New</p>
-                             <div class="diff-container" onmousemove="moveDiff(event)" ontouchmove="moveDiff(event)">
-                                 <!-- Original (Background) -->
-                                 <img id="diff-img-old" class="diff-img opacity-50 grayscale" src="" alt="Old Version">
-                                 <!-- New (Foreground, resized width) -->
-                                 <div id="diff-resize" class="diff-resize">
-                                     <img id="diff-img-new" class="diff-img" src="" alt="New Version">
-                                 </div>
-                                 <div id="diff-handle" class="diff-handle">
-                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="15 18 9 12 15 6"/></svg>
-                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="9 18 15 12 9 6"/></svg>
-                                 </div>
-                             </div>
+                    </div>
+
+                    <!-- Assigned to Me -->
+                    <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden h-[500px] flex flex-col">
+                        <div class="p-4 border-b border-slate-100 bg-indigo-50 text-indigo-800 font-semibold flex justify-between">
+                            <span>Assigned to Me</span>
+                            <span id="badge-assigned" class="bg-indigo-200 text-indigo-800 text-xs px-2 py-0.5 rounded-full hidden">0</span>
                         </div>
-
-                        <!-- Text Container -->
-                        <div id="verify-doc-wrapper" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap flex-1"></div>
-                    </div>
-                </div>
-
-                <!-- Verification List -->
-                <div class="w-1/3 bg-white rounded-xl border border-slate-200 flex flex-col shadow-sm">
-                    <div class="p-4 border-b bg-slate-50">
-                        <h3 class="font-bold flex items-center gap-2">
-                            <svg class="text-indigo-600" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                            Verification Report
-                        </h3>
-                    </div>
-                    <div class="flex-1 overflow-y-auto p-4 space-y-4" id="verification-list"></div>
-                    <div class="p-4 border-t bg-slate-50">
-                        <button id="btn-proceed-approval" disabled onclick="goToStage(4)" class="w-full bg-slate-300 text-white py-3 rounded-lg font-semibold cursor-not-allowed transition">
-                            Verify & Proceed
-                        </button>
+                        <div id="list-assigned-docs" class="flex-1 overflow-y-auto p-2 scroller">
+                            <div class="p-8 text-center text-slate-400">No pending reviews.</div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- STAGE 4: APPROVAL CHECKLIST -->
-        <div id="stage-4" class="hidden-stage max-w-2xl mx-auto fade-in pt-12">
-            <h2 class="text-2xl font-bold mb-6">Final Approval Checklist</h2>
-            <div class="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden mb-8">
-                <div class="p-3 bg-slate-50 border-b text-xs text-slate-500 font-bold uppercase">Click to toggle: Empty → Checked → N/A</div>
-                
-                <div onclick="toggleCheck(this)" class="checklist-item p-5 border-b hover:bg-slate-50 cursor-pointer flex items-center gap-4" data-status="unchecked">
-                    <div class="status-icon w-6 h-6 border-2 border-slate-300 rounded-full"></div>
-                    <span class="text-lg">Grammar and spelling is accurate</span>
-                </div>
-                <div onclick="toggleCheck(this)" class="checklist-item p-5 border-b hover:bg-slate-50 cursor-pointer flex items-center gap-4" data-status="unchecked">
-                    <div class="status-icon w-6 h-6 border-2 border-slate-300 rounded-full"></div>
-                    <span class="text-lg">Images and graphics used appropriately</span>
-                </div>
-                <div onclick="toggleCheck(this)" class="checklist-item p-5 border-b hover:bg-slate-50 cursor-pointer flex items-center gap-4" data-status="unchecked">
-                    <div class="status-icon w-6 h-6 border-2 border-slate-300 rounded-full"></div>
-                    <span class="text-lg">Dates and times are clearly stated</span>
-                </div>
-                <div onclick="toggleCheck(this)" class="checklist-item p-5 hover:bg-slate-50 cursor-pointer flex items-center gap-4" data-status="unchecked">
-                    <div class="status-icon w-6 h-6 border-2 border-slate-300 rounded-full"></div>
-                    <span class="text-lg">Terms and conditions are clearly stated</span>
-                </div>
-            </div>
-            <button onclick="goToStage(5)" id="btn-approve" disabled class="w-full py-4 rounded-xl font-bold text-lg bg-slate-200 text-slate-400 cursor-not-allowed transition">Submit Final Approval</button>
+        <!-- UPLOAD WIZARD VIEW -->
+        <div id="view-wizard" class="hidden flex-1 overflow-auto p-6 fade-in">
+             <div class="max-w-3xl mx-auto bg-white rounded-xl shadow-lg border border-slate-200 p-8">
+                 <button onclick="showDashboard()" class="text-sm text-slate-400 hover:text-indigo-600 mb-4 flex items-center gap-1">← Back to Dashboard</button>
+                 
+                 <h2 class="text-2xl font-bold mb-6">Upload New Content</h2>
+                 
+                 <div class="space-y-6">
+                     <div>
+                         <label class="block text-sm font-medium text-slate-700 mb-2">Project Title</label>
+                         <input type="text" id="input-title" class="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none">
+                     </div>
+
+                     <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Media Type</label>
+                        <select id="input-type" class="w-full border border-slate-300 rounded-lg p-3 bg-white">
+                            <option value="signage">Printed Signage</option>
+                            <option value="social">Social Media</option>
+                            <option value="policy">Policy & Procedures</option>
+                            <option value="digital">Digital Content</option>
+                        </select>
+                     </div>
+
+                     <div class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:bg-slate-50 cursor-pointer" onclick="document.getElementById('file-upload').click()">
+                         <div id="file-preview-name" class="text-slate-600">Click to upload (Image/PDF/Doc)</div>
+                         <input type="file" id="file-upload" class="hidden" onchange="handleFilePreview(this)">
+                     </div>
+
+                     <button onclick="submitProject()" id="btn-submit-project" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">
+                         Analyze & Save Project
+                     </button>
+                     <p id="upload-status" class="text-center text-sm text-slate-500 mt-2 hidden">Uploading & Analyzing...</p>
+                 </div>
+             </div>
         </div>
 
-        <!-- STAGE 5: SUCCESS -->
-        <div id="stage-5" class="hidden-stage flex flex-col items-center justify-center h-full text-center fade-in">
-            <div class="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6 shadow-sm">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        <!-- PROJECT VIEW -->
+        <div id="view-project" class="hidden flex-1 overflow-hidden flex flex-col fade-in bg-slate-100">
+            <!-- Toolbar -->
+            <div class="bg-white border-b px-6 py-3 flex justify-between items-center shadow-sm">
+                <div class="flex items-center gap-4">
+                    <button onclick="showDashboard()" class="text-slate-400 hover:text-indigo-600">← Back</button>
+                    <div>
+                        <h1 id="project-title-display" class="font-bold text-lg leading-tight">Project Title</h1>
+                        <span id="project-status-badge" class="text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-600">Draft</span>
+                    </div>
+                </div>
+                <div class="flex gap-2" id="action-buttons">
+                    <!-- Dynamic Buttons injected here -->
+                </div>
             </div>
-            <h1 class="text-4xl font-bold text-slate-900 mb-4">Approved!</h1>
-            <p class="text-lg text-slate-600 mb-8 max-w-md">The document has passed all automated checks and manual approvals. It is ready for publication.</p>
-            <button onclick="location.reload()" class="bg-slate-900 text-white px-8 py-3 rounded-lg font-medium hover:bg-slate-800">Start New Session</button>
+
+            <div class="flex-1 flex overflow-hidden">
+                <!-- Left: Document -->
+                <div class="flex-1 overflow-auto p-6 flex justify-center bg-slate-200">
+                    <div id="doc-container" class="bg-white shadow-lg min-h-[800px] w-full max-w-3xl p-8 rounded">
+                        <!-- Content -->
+                    </div>
+                </div>
+
+                <!-- Right: Feedback Panel -->
+                <div class="w-96 bg-white border-l border-slate-200 flex flex-col overflow-hidden">
+                    <div class="p-4 bg-slate-50 border-b font-bold text-slate-700">AI Suggestions</div>
+                    <div id="ai-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller"></div>
+                    
+                    <div class="p-4 bg-indigo-50 border-t border-indigo-100">
+                        <div class="font-bold text-indigo-900 text-sm mb-2">Manager Comments</div>
+                        <div id="manager-comments-display" class="text-sm text-slate-600 italic mb-2 min-h-[20px]">No comments yet.</div>
+                        <textarea id="manager-input" class="w-full border p-2 rounded text-sm hidden" placeholder="Add feedback..."></textarea>
+                    </div>
+                </div>
+            </div>
         </div>
 
-    </main>
+    </div>
 
-    <!-- LOGIC -->
-    <script>
-        // --- DATA ---
-        let currentStage = 1;
-        let currentMediaType = null;
-        let selectedFile = null;
-        let fileContent = null; 
-        let fileMimeType = null;
-        let isBinaryFile = false;
-        let currentEdits = [];
-
-        // For Visual Diff
-        let originalImageSrc = null;
-
-        // --- NAVIGATION ---
-        function canNavigate(targetStage) {
-            if (targetStage < currentStage) return true;
-            return false;
-        }
-
-        function goToStage(stageNum) {
-            currentStage = stageNum;
-            document.querySelectorAll('[id^="stage-"]').forEach(el => el.classList.add('hidden-stage'));
-            document.getElementById(`stage-${stageNum}`).classList.remove('hidden-stage');
+    <!-- ASSIGN MODAL -->
+    <div id="modal-assign" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center fade-in">
+        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+            <h3 class="text-xl font-bold mb-4">Assign Reviewer</h3>
+            <p class="text-sm text-slate-500 mb-6">Select a team member to review this document.</p>
             
-            for(let i=1; i<=4; i++) {
-                const navEl = document.getElementById(`nav-${i}`);
-                if(i === stageNum) {
-                    navEl.className = "nav-item text-indigo-600 font-bold border-b-2 border-indigo-600";
-                } else if(i < stageNum) {
-                    navEl.className = "nav-item text-green-600";
-                } else {
-                    navEl.className = "nav-item text-slate-400";
-                }
-            }
+            <div id="user-list-container" class="grid grid-cols-3 gap-4 mb-6 max-h-60 overflow-y-auto scroller">
+                <!-- User bubbles injected here -->
+            </div>
 
-            if(stageNum === 2) renderReview();
-            if(stageNum === 3) resetVerifyView();
-        }
+            <button onclick="closeModal()" class="w-full bg-slate-100 text-slate-600 py-3 rounded-lg font-medium hover:bg-slate-200">Cancel</button>
+        </div>
+    </div>
 
-        // --- STAGE 1: UPLOAD & API CALL ---
-        function selectMedia(type) {
-            currentMediaType = type;
-            document.querySelectorAll('.media-btn').forEach(btn => {
-                btn.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50', 'border-indigo-500');
+    <!-- FIREBASE MODULES -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, getDoc, getDocs, updateDoc, setDoc, query, where, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
+        // CONFIGURATION
+        const firebaseConfig = {
+            apiKey: "AIzaSyAc4Vm815th4dUNmIbyMz631SirvAedkFg",
+            authDomain: "ai-proofer-e4b94.firebaseapp.com",
+            projectId: "ai-proofer-e4b94",
+            storageBucket: "ai-proofer-e4b94.firebasestorage.app",
+            messagingSenderId: "910098525294",
+            appId: "1:910098525294:web:fbb25ef2f22ae497958a7f"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+        const provider = new GoogleAuthProvider();
+
+        // GLOBAL STATE
+        let currentUser = null;
+        let currentProject = null;
+
+        // --- AUTH LOGIC ---
+        window.signIn = () => {
+            signInWithPopup(auth, provider).catch(err => {
+                document.getElementById('login-error').innerText = err.message;
+                document.getElementById('login-error').classList.remove('hidden');
             });
-            document.getElementById(`btn-${type}`).classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50', 'border-indigo-500');
-            checkUploadReady();
-        }
+        };
 
-        function handleFileSelect(input) {
-            const file = input.files[0];
-            if (!file) return;
-            selectedFile = file;
-            fileMimeType = file.type;
-            
-            document.getElementById('upload-text').innerText = `Selected: ${file.name}`;
-            document.getElementById('upload-text').classList.add('text-green-600', 'font-bold');
+        window.logout = () => signOut(auth);
 
-            const reader = new FileReader();
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                currentUser = user;
+                await setDoc(doc(db, "users", user.uid), {
+                    uid: user.uid,
+                    displayName: user.displayName,
+                    email: user.email,
+                    photoURL: user.photoURL,
+                    lastSeen: serverTimestamp()
+                }, { merge: true });
 
-            if (file.type.startsWith('image/') || file.type === 'application/pdf') {
-                isBinaryFile = true;
-                reader.onload = (e) => {
-                    const result = e.target.result;
-                    fileContent = result.split(',')[1]; 
-                    // Save for visual diff later
-                    originalImageSrc = result; 
-                    checkUploadReady();
-                };
-                reader.readAsDataURL(file);
+                document.getElementById('view-login').classList.add('hidden');
+                document.getElementById('view-app').classList.remove('hidden');
+                document.getElementById('user-name').innerText = user.displayName;
+                document.getElementById('user-email').innerText = user.email;
+                document.getElementById('user-avatar').src = user.photoURL;
+                
+                loadDashboard();
             } else {
-                isBinaryFile = false;
-                reader.onload = (e) => {
-                    fileContent = e.target.result;
-                    checkUploadReady();
-                };
-                reader.readAsText(file);
+                currentUser = null;
+                document.getElementById('view-login').classList.remove('hidden');
+                document.getElementById('view-app').classList.add('hidden');
             }
+        });
+
+        // --- DASHBOARD LOGIC ---
+        window.showDashboard = () => {
+            hideAllViews();
+            document.getElementById('view-dashboard').classList.remove('hidden');
+            loadDashboard();
+        };
+
+        async function loadDashboard() {
+            if(!currentUser) return;
+
+            const qMyDocs = query(collection(db, "projects"), where("creatorId", "==", currentUser.uid), orderBy("createdAt", "desc"));
+            onSnapshot(qMyDocs, (snapshot) => {
+                const container = document.getElementById('list-my-docs');
+                container.innerHTML = '';
+                if(snapshot.empty) {
+                    container.innerHTML = '<div class="p-4 text-center text-slate-400">You haven\'t created any documents yet.</div>';
+                    return;
+                }
+                snapshot.forEach(doc => renderDocCard(doc.data(), doc.id, container, false));
+            });
+
+            const qAssigned = query(collection(db, "projects"), where("reviewerId", "==", currentUser.uid), orderBy("createdAt", "desc"));
+            onSnapshot(qAssigned, (snapshot) => {
+                const container = document.getElementById('list-assigned-docs');
+                const badge = document.getElementById('badge-assigned');
+                container.innerHTML = '';
+                
+                if(snapshot.empty) {
+                    container.innerHTML = '<div class="p-4 text-center text-slate-400">No documents waiting for your review.</div>';
+                    badge.classList.add('hidden');
+                    return;
+                }
+                
+                badge.innerText = snapshot.size;
+                badge.classList.remove('hidden');
+                snapshot.forEach(doc => renderDocCard(doc.data(), doc.id, container, true));
+            });
         }
 
-        function checkUploadReady() {
-            const btn = document.getElementById('btn-analyze');
-            if(currentMediaType && fileContent) {
-                btn.disabled = false;
-                btn.classList.remove('bg-slate-300', 'cursor-not-allowed');
-                btn.classList.add('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-lg');
-            }
-        }
-
-        async function runAnalysis() {
-            document.getElementById('loading-indicator').classList.remove('hidden');
-            document.getElementById('btn-analyze').classList.add('hidden');
-            document.getElementById('error-msg').classList.add('hidden');
+        function renderDocCard(data, id, container, isAssigned) {
+            const div = document.createElement('div');
+            div.className = "p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition";
+            div.onclick = () => loadProject(id);
             
-            const targetAudience = document.getElementById('target-audience').value;
-            const styleGuide = document.getElementById('style-guide').value;
+            let statusColor = "bg-slate-100 text-slate-600";
+            if(data.status === 'Approved') statusColor = "bg-green-100 text-green-700";
+            if(data.status === 'Archived') statusColor = "bg-slate-800 text-white";
+            if(data.status === 'Needs Review') statusColor = "bg-amber-100 text-amber-700";
+            if(data.status === 'Changes Requested') statusColor = "bg-red-100 text-red-700";
+
+            div.innerHTML = `
+                <div>
+                    <div class="font-semibold text-slate-800">${data.title}</div>
+                    <div class="text-xs text-slate-500">${data.mediaType} • ${new Date(data.createdAt?.toDate()).toLocaleDateString()}</div>
+                </div>
+                <div class="flex items-center gap-3">
+                    ${isAssigned ? `<img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full" title="Creator: ${data.creatorName}">` : ''}
+                    <span class="text-xs px-2 py-1 rounded-full font-bold ${statusColor}">${data.status}</span>
+                    <svg class="text-slate-300 w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                </div>
+            `;
+            container.appendChild(div);
+        }
+
+        // --- UPLOAD LOGIC ---
+        window.startUpload = () => {
+            hideAllViews();
+            document.getElementById('view-wizard').classList.remove('hidden');
+            document.getElementById('input-title').value = '';
+            document.getElementById('file-upload').value = '';
+            document.getElementById('file-preview-name').innerText = "Click to upload (Image/PDF/Doc)";
+        };
+
+        let fileToUpload = null;
+        let fileBase64 = null;
+
+        window.handleFilePreview = (input) => {
+            if(input.files[0]) {
+                fileToUpload = input.files[0];
+                document.getElementById('file-preview-name').innerText = fileToUpload.name;
+                document.getElementById('file-preview-name').classList.add('text-indigo-600', 'font-bold');
+                
+                const reader = new FileReader();
+                reader.onload = (e) => fileBase64 = e.target.result;
+                reader.readAsDataURL(fileToUpload);
+            }
+        };
+
+        window.submitProject = async () => {
+            const title = document.getElementById('input-title').value;
+            const type = document.getElementById('input-type').value;
+            const statusMsg = document.getElementById('upload-status');
+            const btn = document.getElementById('btn-submit-project');
+
+            if(!title || !fileToUpload) return alert("Please fill all fields");
+
+            btn.disabled = true;
+            statusMsg.classList.remove('hidden');
+            statusMsg.innerText = "Step 1/2: Analyzing with AI...";
 
             try {
-                const response = await fetch('/.netlify/functions/proof-read', {
+                const contentRaw = fileBase64.split(',')[1];
+                const isBinary = fileToUpload.type.startsWith('image/') || fileToUpload.type === 'application/pdf';
+
+                const aiResponse = await fetch('/.netlify/functions/proof-read', {
                     method: 'POST',
-                    body: JSON.stringify({ 
+                    body: JSON.stringify({
                         mode: 'analyze',
-                        content: fileContent,
-                        mediaType: currentMediaType,
-                        mimeType: fileMimeType,
-                        isBinary: isBinaryFile,
-                        targetAudience,
-                        styleGuide
+                        content: contentRaw,
+                        mediaType: type,
+                        mimeType: fileToUpload.type,
+                        isBinary: isBinary
                     })
                 });
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.details || errorData.error || "Server Error");
-                }
+                if(!aiResponse.ok) throw new Error("AI Analysis failed");
+                const suggestions = await aiResponse.json();
 
-                const suggestions = await response.json();
-                currentEdits = suggestions.map(s => ({ ...s, status: 'pending' }));
-                
-                goToStage(2);
-            } catch (err) {
-                console.error(err);
-                document.getElementById('error-msg').innerText = "Error: " + err.message;
-                document.getElementById('error-msg').classList.remove('hidden');
-            } finally {
-                document.getElementById('loading-indicator').classList.add('hidden');
-                document.getElementById('btn-analyze').classList.remove('hidden');
-            }
-        }
+                statusMsg.innerText = "Step 2/2: Saving to Database...";
 
-        // --- STAGE 2: REVIEW ---
-        function renderReview() {
-            document.getElementById('doc-title').innerText = selectedFile ? selectedFile.name : "Document";
-            const wrapper = document.getElementById('doc-wrapper');
-            wrapper.innerHTML = '';
+                // Upload to Storage
+                const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
+                await uploadString(storageRef, fileBase64, 'data_url');
+                const downloadURL = await getDownloadURL(storageRef);
 
-            if (isBinaryFile) {
-                if (fileMimeType.startsWith('image/')) {
-                    const img = document.createElement('img');
-                    img.src = `data:${fileMimeType};base64,${fileContent}`;
-                    img.className = "max-w-full h-auto border border-slate-300 shadow-sm";
-                    wrapper.appendChild(img);
-                } else if (fileMimeType === 'application/pdf') {
-                    const iframe = document.createElement('iframe');
-                    iframe.src = `data:${fileMimeType};base64,${fileContent}`;
-                    iframe.className = "w-full h-[600px] border border-slate-300";
-                    wrapper.appendChild(iframe);
-                }
-            } else {
-                let htmlContent = fileContent;
-                htmlContent = htmlContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                
-                currentEdits.forEach(edit => {
-                    const regex = new RegExp(`(${escapeRegExp(edit.original)})`, 'g');
-                    htmlContent = htmlContent.replace(regex, `<span id="highlight-${edit.id}" class="highlight" onclick="focusSuggestion(${edit.id})">$1</span>`);
-                });
-                wrapper.innerHTML = htmlContent;
-            }
-
-            const list = document.getElementById('suggestions-list');
-            list.innerHTML = '';
-            
-            currentEdits.forEach(edit => {
-                const item = document.createElement('div');
-                item.id = `suggestion-${edit.id}`;
-                item.className = `border rounded-lg p-4 bg-white transition cursor-pointer mb-4 ${getSuggestionClass(edit.status)}`;
-                if(!isBinaryFile) item.onclick = () => focusHighlight(edit.id);
-                
-                // Confidence Badge
-                const conf = edit.confidence || 'Medium';
-                let confColor = 'bg-yellow-100 text-yellow-700';
-                if(conf === 'High') confColor = 'bg-green-100 text-green-700';
-                if(conf === 'Low') confColor = 'bg-red-100 text-red-700';
-
-                item.innerHTML = `
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-xs font-bold text-slate-400 uppercase">${edit.reason}</span>
-                        <span class="text-xs font-bold px-2 py-0.5 rounded ${confColor}">${conf} Confidence</span>
-                    </div>
-                    <div class="mb-2">
-                        <span class="line-through text-red-400 mr-2">${edit.original}</span>
-                        <span class="text-green-600 font-bold text-lg">${edit.fix}</span>
-                    </div>
-                    <div class="flex gap-2 mt-2">
-                        <button class="flex-1 bg-green-100 text-green-700 text-xs px-3 py-2 rounded font-bold hover:bg-green-200" onclick="updateStatus(${edit.id}, 'accepted', event)">Accept</button>
-                        <button class="flex-1 bg-red-100 text-red-700 text-xs px-3 py-2 rounded font-bold hover:bg-red-200" onclick="updateStatus(${edit.id}, 'rejected', event)">Ignore</button>
-                    </div>
-                `;
-                list.appendChild(item);
-            });
-        }
-
-        function escapeRegExp(string) {
-            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        }
-
-        function getSuggestionClass(status) {
-            if(status === 'accepted') return 'status-accepted border-green-500';
-            if(status === 'rejected') return 'status-rejected border-red-500 opacity-60';
-            return 'border-slate-200 hover:border-indigo-300';
-        }
-
-        function updateStatus(id, status, event) {
-            event.stopPropagation();
-            const edit = currentEdits.find(e => e.id === id);
-            if(edit) {
-                edit.status = status;
-                // Re-render to update class
-                renderReview();
-            }
-        }
-
-        function focusHighlight(id) {
-            document.querySelectorAll('.highlight').forEach(el => el.classList.remove('active'));
-            const el = document.getElementById(`highlight-${id}`);
-            if(el) el.classList.add('active');
-        }
-
-        function focusSuggestion(id) {
-            const el = document.getElementById(`suggestion-${id}`);
-            if(el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                el.classList.add('ring-2', 'ring-indigo-500');
-                setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-500'), 1000);
-            }
-        }
-
-        // --- STAGE 3: VERIFY ---
-        function resetVerifyView() {
-            document.getElementById('verify-upload-view').classList.remove('hidden');
-            document.getElementById('verify-split-view').classList.add('hidden');
-            document.getElementById('verify-loading').classList.add('hidden');
-            document.getElementById('verify-error-msg').classList.add('hidden');
-        }
-
-        async function startVerificationFlow(input) {
-            const file = input.files[0];
-            if (!file) return;
-
-            document.getElementById('verify-loading').classList.remove('hidden');
-            document.getElementById('verify-error-msg').classList.add('hidden');
-
-            // 1. Prepare file data
-            let verifyContent = null;
-            let verifyMime = file.type;
-            let verifyIsBinary = false;
-            let verifyRawData = null; // for visual diff
-
-            const reader = new FileReader();
-            
-            const promise = new Promise((resolve) => {
-                if (file.type.startsWith('image/') || file.type === 'application/pdf') {
-                    verifyIsBinary = true;
-                    reader.onload = (e) => {
-                        verifyRawData = e.target.result;
-                        verifyContent = verifyRawData.split(',')[1];
-                        resolve();
-                    };
-                    reader.readAsDataURL(file);
-                } else {
-                    verifyIsBinary = false;
-                    reader.onload = (e) => {
-                        verifyContent = e.target.result;
-                        resolve();
-                    };
-                    reader.readAsText(file);
-                }
-            });
-
-            await promise;
-
-            const acceptedEdits = currentEdits.filter(e => e.status === 'accepted');
-
-            try {
-                const response = await fetch('/.netlify/functions/proof-read', {
-                    method: 'POST',
-                    body: JSON.stringify({ 
-                        mode: 'verify',
-                        content: verifyContent,
-                        mediaType: currentMediaType,
-                        mimeType: verifyMime,
-                        isBinary: verifyIsBinary,
-                        expectedEdits: acceptedEdits
-                    })
+                // Save to DB with STORAGE PATH
+                const docRef = await addDoc(collection(db, "projects"), {
+                    title: title,
+                    mediaType: type,
+                    fileURL: downloadURL,
+                    storagePath: storageRef.fullPath, // Storing path for deletion later
+                    fileMime: fileToUpload.type,
+                    status: 'Draft',
+                    creatorId: currentUser.uid,
+                    creatorName: currentUser.displayName,
+                    creatorPhoto: currentUser.photoURL,
+                    createdAt: serverTimestamp(),
+                    aiSuggestions: suggestions,
+                    reviewerId: null,
+                    managerComments: ""
                 });
 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.details || errorData.error || "Verification Failed");
-                }
-                
-                const verificationResults = await response.json();
+                loadProject(docRef.id);
 
-                // 4. Render Results
-                document.getElementById('verify-upload-view').classList.add('hidden');
-                document.getElementById('verify-split-view').classList.remove('hidden');
-                document.getElementById('verify-split-view').classList.add('flex');
-                
-                const wrapper = document.getElementById('verify-doc-wrapper');
-                const diffContainer = document.getElementById('diff-container-wrapper');
-                const diffMsg = document.getElementById('diff-toggle-msg');
-
-                wrapper.innerHTML = '';
-                diffContainer.classList.add('hidden');
-                wrapper.classList.remove('hidden');
-                diffMsg.classList.add('hidden');
-
-                if(verifyIsBinary) {
-                    if (verifyMime.startsWith('image/')) {
-                        // VISUAL DIFF MODE for Images
-                        wrapper.classList.add('hidden');
-                        diffContainer.classList.remove('hidden');
-                        diffMsg.classList.remove('hidden');
-                        
-                        document.getElementById('diff-img-old').src = originalImageSrc;
-                        document.getElementById('diff-img-new').src = verifyRawData;
-
-                    } else if (verifyMime === 'application/pdf') {
-                        // Just show PDF, diffing PDFs visually is hard in canvas
-                        const iframe = document.createElement('iframe');
-                        iframe.src = `data:${verifyMime};base64,${verifyContent}`;
-                        iframe.className = "w-full h-[600px] border border-slate-300";
-                        wrapper.appendChild(iframe);
-                    }
-                } else {
-                     if(!verifyIsBinary) wrapper.innerText = verifyContent;
-                }
-
-                renderVerifyList(verificationResults);
-
-            } catch (err) {
-                console.error(err);
-                document.getElementById('verify-error-msg').innerText = "Verification Error: " + err.message;
-                document.getElementById('verify-error-msg').classList.remove('hidden');
-            } finally {
-                document.getElementById('verify-loading').classList.add('hidden');
-            }
-        }
-
-        // --- Visual Diff Logic ---
-        function moveDiff(e) {
-            const container = document.querySelector('.diff-container');
-            const rect = container.getBoundingClientRect();
-            let x = e.clientX || e.touches[0].clientX;
-            let posX = x - rect.left;
-            
-            // Constrain
-            if (posX < 0) posX = 0;
-            if (posX > rect.width) posX = rect.width;
-            
-            const percent = (posX / rect.width) * 100;
-            
-            document.getElementById('diff-resize').style.width = percent + '%';
-            document.getElementById('diff-handle').style.left = percent + '%';
-        }
-
-        function renderVerifyList(results) {
-            const list = document.getElementById('verification-list');
-            list.innerHTML = '';
-            
-            results.forEach((item, index) => {
-                const div = document.createElement('div');
-                div.className = "border-b border-slate-100 pb-3 last:border-0";
-                
-                let icon = '', text = '', sub = '';
-
-                if(item.status === 'verified') {
-                    icon = '<span class="text-green-500 font-bold">✓</span>';
-                    text = `Verified: "${item.fix}"`;
-                    sub = item.comment || "Change detected successfully.";
-                } else {
-                     icon = '<span class="text-red-500 font-bold">X</span>';
-                     text = `Not Found: "${item.fix}"`;
-                     sub = item.comment || "Could not verify this change.";
-                }
-
-                div.innerHTML = `
-                    <div class="flex items-start gap-3 fade-in">
-                        <div class="mt-1">${icon}</div>
-                        <div>
-                            <div class="font-medium text-sm text-slate-800">${text}</div>
-                            <div class="text-xs text-slate-500">${sub}</div>
-                        </div>
-                    </div>
-                `;
-                list.appendChild(div);
-            });
-
-            // Also add skipped items
-            const skipped = currentEdits.filter(e => e.status !== 'accepted');
-            skipped.forEach(s => {
-                const div = document.createElement('div');
-                div.className = "border-b border-slate-100 pb-3 last:border-0 opacity-60";
-                div.innerHTML = `
-                    <div class="flex items-start gap-3 fade-in">
-                        <div class="mt-1 text-slate-400 font-bold">-</div>
-                        <div>
-                            <div class="font-medium text-sm text-slate-500">Skipped: "${s.original}"</div>
-                            <div class="text-xs text-slate-400">You ignored this edit.</div>
-                        </div>
-                    </div>
-                `;
-                list.appendChild(div);
-            });
-
-            const btn = document.getElementById('btn-proceed-approval');
-            btn.disabled = false;
-            btn.classList.remove('bg-slate-300', 'cursor-not-allowed');
-            btn.classList.add('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-lg');
-            btn.innerHTML = "Proceed to Approval";
-        }
-
-        // --- STAGE 4: CHECKLIST ---
-        function toggleCheck(el) {
-            const status = el.getAttribute('data-status');
-            const icon = el.querySelector('.status-icon');
-            const text = el.querySelector('span');
-            
-            if(status === 'unchecked') {
-                el.setAttribute('data-status', 'checked');
-                icon.innerHTML = `<svg class="text-green-500 w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>`;
-                icon.className = "status-icon w-6 h-6 border-2 border-green-500 rounded-full flex items-center justify-center";
-                text.className = "text-lg text-slate-800";
-            } else if(status === 'checked') {
-                el.setAttribute('data-status', 'na');
-                icon.innerHTML = '<span class="text-[10px] font-bold text-slate-400">N/A</span>';
-                icon.className = "status-icon w-6 h-6 border-2 border-slate-300 rounded-full flex items-center justify-center bg-slate-100";
-                text.className = "text-lg text-slate-400 line-through";
-            } else {
-                el.setAttribute('data-status', 'unchecked');
-                icon.innerHTML = '';
-                icon.className = "status-icon w-6 h-6 border-2 border-slate-300 rounded-full";
-                text.className = "text-lg text-slate-800";
-            }
-            checkApprovalReady();
-        }
-
-        function checkApprovalReady() {
-            const items = document.querySelectorAll('.checklist-item');
-            let allDone = true;
-            items.forEach(item => {
-                if(item.getAttribute('data-status') === 'unchecked') allDone = false;
-            });
-            const btn = document.getElementById('btn-approve');
-            if(allDone) {
+            } catch(e) {
+                console.error(e);
+                alert("Error: " + e.message);
                 btn.disabled = false;
-                btn.classList.remove('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
-                btn.classList.add('bg-indigo-600', 'text-white', 'hover:bg-indigo-700', 'shadow-lg');
+                statusMsg.classList.add('hidden');
+            }
+        };
+
+
+        // --- PROJECT VIEW LOGIC ---
+        window.loadProject = async (id) => {
+            hideAllViews();
+            document.getElementById('view-project').classList.remove('hidden');
+            
+            onSnapshot(doc(db, "projects", id), (docSnap) => {
+                if(docSnap.exists()) {
+                    currentProject = { id: docSnap.id, ...docSnap.data() };
+                    renderProjectView();
+                }
+            });
+        };
+
+        function renderProjectView() {
+            const p = currentProject;
+            document.getElementById('project-title-display').innerText = p.title;
+            const badge = document.getElementById('project-status-badge');
+            badge.innerText = p.status;
+
+            // Render Document
+            const container = document.getElementById('doc-container');
+            container.innerHTML = '';
+            
+            if(p.status === 'Archived') {
+                container.innerHTML = `<div class="p-12 text-center text-slate-500 italic">This project has been archived and the source file deleted.</div>`;
+            } else if(p.fileMime && p.fileMime.startsWith('image/')) {
+                container.innerHTML = `<img src="${p.fileURL}" class="max-w-full h-auto mx-auto shadow">`;
+            } else if(p.fileMime === 'application/pdf') {
+                container.innerHTML = `<iframe src="${p.fileURL}" class="w-full h-full border-0"></iframe>`;
             } else {
-                btn.disabled = true;
-                btn.classList.add('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
-                btn.classList.remove('bg-indigo-600', 'text-white', 'hover:bg-indigo-700', 'shadow-lg');
+                container.innerHTML = `<div class="p-4 whitespace-pre-wrap">File content available.</div>`;
+            }
+
+            // Render AI Suggestions
+            const list = document.getElementById('ai-feedback-list');
+            list.innerHTML = '';
+            (p.aiSuggestions || []).forEach(s => {
+                list.innerHTML += `
+                    <div class="border border-slate-200 rounded p-3 bg-white text-sm mb-2">
+                        <div class="text-slate-400 text-xs font-bold uppercase mb-1">${s.reason}</div>
+                        <div class="mb-1"><span class="line-through text-red-400">${s.original}</span> -> <span class="text-green-600 font-bold">${s.fix}</span></div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('manager-comments-display').innerText = p.managerComments || "No comments yet.";
+
+            // Dynamic Buttons
+            const actions = document.getElementById('action-buttons');
+            actions.innerHTML = '';
+
+            const isCreator = p.creatorId === currentUser.uid;
+            const isReviewer = p.reviewerId === currentUser.uid;
+
+            if(isCreator && p.status === 'Draft') {
+                actions.innerHTML = `<button onclick="openAssignModal()" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700">Assign Reviewer</button>`;
+            } else if(isCreator && p.status === 'Changes Requested') {
+                actions.innerHTML = `<button onclick="startUpload()" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm">Upload Revision</button>`;
+            } else if(isReviewer && p.status === 'Needs Review') {
+                document.getElementById('manager-input').classList.remove('hidden');
+                document.getElementById('manager-input').value = p.managerComments || "";
+                
+                actions.innerHTML = `
+                    <button onclick="submitReview('Changes Requested')" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded text-sm hover:bg-red-50">Request Changes</button>
+                    <button onclick="submitReview('Approved')" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700">Approve Concept</button>
+                `;
+            } else if (p.status === 'Approved') {
+                 if (isCreator || isReviewer) {
+                     actions.innerHTML = `<button onclick="finalizeProject()" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-900 shadow-lg">Final Commit (Archive)</button>`;
+                 }
             }
         }
+
+        // --- ASSIGN LOGIC ---
+        window.openAssignModal = async () => {
+            document.getElementById('modal-assign').classList.remove('hidden');
+            const list = document.getElementById('user-list-container');
+            list.innerHTML = 'Loading users...';
+            
+            const snaps = await getDocs(collection(db, "users"));
+            list.innerHTML = '';
+            
+            snaps.forEach(docSnap => {
+                const u = docSnap.data();
+                if(u.uid === currentUser.uid) return;
+
+                const div = document.createElement('div');
+                div.className = "user-bubble cursor-pointer flex flex-col items-center p-2 rounded-xl border border-transparent transition";
+                div.onclick = () => assignUser(u);
+                div.innerHTML = `
+                    <img src="${u.photoURL}" class="w-12 h-12 rounded-full mb-2 border border-slate-200">
+                    <span class="text-xs font-bold text-center leading-tight">${u.displayName.split(' ')[0]}</span>
+                `;
+                list.appendChild(div);
+            });
+        };
+
+        window.closeModal = () => document.getElementById('modal-assign').classList.add('hidden');
+
+        async function assignUser(user) {
+            if(!confirm(`Assign ${user.displayName} as reviewer?`)) return;
+            
+            await updateDoc(doc(db, "projects", currentProject.id), {
+                reviewerId: user.uid,
+                reviewerName: user.displayName,
+                status: 'Needs Review'
+            });
+            closeModal();
+            alert("Assigned!");
+        }
+
+        // --- REVIEW LOGIC ---
+        window.submitReview = async (status) => {
+            const comments = document.getElementById('manager-input').value;
+            await updateDoc(doc(db, "projects", currentProject.id), {
+                status: status,
+                managerComments: comments
+            });
+            alert(`Project marked as ${status}`);
+        };
+
+        // --- FINAL COMMIT & DELETE LOGIC ---
+        window.finalizeProject = async () => {
+            if(!confirm("Confirm Final Approval? This will archive the project and DELETE the source file from the server to save storage space.")) return;
+            
+            try {
+                // 1. Delete file from Storage if path exists
+                if(currentProject.storagePath) {
+                    const fileRef = ref(storage, currentProject.storagePath);
+                    await deleteObject(fileRef);
+                }
+
+                // 2. Update DB
+                await updateDoc(doc(db, "projects", currentProject.id), {
+                    status: 'Archived',
+                    fileURL: null, // Clear link
+                    archivedAt: serverTimestamp()
+                });
+                
+                alert("Project finalized. Source file deleted.");
+                showDashboard();
+            } catch (e) {
+                console.error(e);
+                alert("Error deleting file: " + e.message);
+            }
+        };
+
+        // HELPER
+        function hideAllViews() {
+            const views = ['view-login', 'view-dashboard', 'view-wizard', 'view-project'];
+            views.forEach(id => document.getElementById(id).classList.add('hidden'));
+        }
+
     </script>
 </body>
 </html>
