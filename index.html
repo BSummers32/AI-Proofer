@@ -4,266 +4,351 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Proof Buddy</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .user-bubble:hover { transform: scale(1.05); border-color: #4f46e5; }
-        .scroller::-webkit-scrollbar { width: 6px; }
-        .scroller::-webkit-scrollbar-track { background: #f1f1f1; }
-        .scroller::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        
-        /* Suggestion Status Styles */
-        .suggestion-card { transition: all 0.2s; border-left-width: 4px; }
-        .status-pending { border-left-color: #cbd5e1; }
-        .status-accepted { border-left-color: #22c55e; background-color: #f0fdf4; }
-        .status-rejected { border-left-color: #ef4444; opacity: 0.6; }
-    </style>
+    <!-- External Styles -->
+    <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-slate-50 text-slate-900 h-screen flex flex-col overflow-hidden">
+<body class="bg-slate-50 text-slate-800 h-screen flex overflow-hidden">
 
-    <!-- LOGIN SCREEN -->
-    <div id="view-login" class="absolute inset-0 z-50 bg-white flex flex-col items-center justify-center fade-in">
+    <!-- LOGIN SCREEN (Overlay) -->
+    <div id="view-login" class="fixed inset-0 z-50 bg-slate-900 flex flex-col items-center justify-center fade-in text-white">
         <div class="text-center max-w-md px-6">
-            <div class="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-indigo-200">
-                <svg class="text-white w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <div class="bg-emerald-500 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-emerald-500/20">
+                <svg class="text-white w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
             </div>
-            <h1 class="text-3xl font-bold text-slate-900 mb-2">Proof Buddy</h1>
-            <p class="text-slate-500 mb-8">Collaborative content approval for teams.</p>
-            <button onclick="signIn()" class="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium py-3 px-4 rounded-xl transition shadow-sm">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5" alt="G">
+            <h1 class="text-4xl font-bold mb-3 brand-font">Proof Buddy</h1>
+            <p class="text-slate-400 mb-10 text-lg">Enterprise content approval & collaboration.</p>
+            <button onclick="signIn()" class="w-full flex items-center justify-center gap-3 bg-white text-slate-900 hover:bg-slate-100 font-bold py-4 px-6 rounded-xl transition shadow-lg transform hover:-translate-y-1">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6" alt="G">
                 Sign in with Google Workspace
             </button>
-            <p id="login-error" class="text-red-500 text-sm mt-4 hidden"></p>
+            <p id="login-error" class="text-red-400 text-sm mt-6 hidden"></p>
         </div>
     </div>
 
-    <!-- MAIN APP LAYOUT (Hidden until login) -->
-    <div id="view-app" class="hidden h-full flex flex-col">
+    <!-- APP WRAPPER (Hidden until login) -->
+    <div id="view-app" class="hidden w-full h-full flex">
         
-        <!-- NAVBAR -->
-        <nav class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm z-40">
-            <div class="flex items-center gap-8">
-                <div class="flex items-center gap-2 cursor-pointer" onclick="showDashboard()">
-                    <div class="bg-indigo-600 p-1.5 rounded text-white">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+        <!-- SIDEBAR -->
+        <aside id="sidebar" class="w-64 sidebar-gradient text-white flex flex-col shadow-2xl z-20 relative">
+            <div class="p-6 flex items-center gap-3 overflow-hidden whitespace-nowrap">
+                <div class="bg-emerald-500 p-2 rounded-xl shadow-lg shadow-emerald-500/20 text-white flex-shrink-0">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>
+                </div>
+                <div class="brand-text">
+                    <span class="text-xl font-bold tracking-tight brand-font block">Proof Buddy</span>
+                    <span class="text-[10px] text-slate-400 font-medium uppercase tracking-widest block">Enterprise</span>
+                </div>
+            </div>
+
+            <nav class="flex-1 px-4 space-y-2 mt-4 overflow-hidden">
+                <button onclick="showDashboard()" class="w-full flex items-center gap-3 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-xl text-emerald-400 font-medium border border-white/5 transition whitespace-nowrap text-left" title="Dashboard">
+                    <svg class="flex-shrink-0" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    <span class="nav-text">Dashboard</span>
+                </button>
+                <button onclick="showArchived()" class="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition font-medium whitespace-nowrap text-left" title="Archived">
+                    <svg class="flex-shrink-0" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                    <span class="nav-text">Archived</span>
+                </button>
+            </nav>
+
+            <button onclick="toggleSidebar()" class="absolute -right-3 top-1/2 bg-slate-800 text-slate-400 p-1 rounded-full shadow border border-slate-600 hover:text-white transition z-30">
+                <svg id="toggle-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+
+            <div class="p-4 border-t border-white/10 user-card flex items-center gap-3 hover:bg-white/5 cursor-pointer transition overflow-hidden">
+                <img id="user-avatar" src="" class="w-10 h-10 rounded-full border-2 border-slate-700 flex-shrink-0">
+                <div class="user-info whitespace-nowrap overflow-hidden">
+                    <div id="user-name" class="text-sm font-bold text-white truncate">User</div>
+                    <button onclick="logout()" class="text-xs text-red-400 hover:text-red-300">Sign Out</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- MAIN CONTENT AREA -->
+        <main class="flex-1 flex flex-col relative overflow-hidden bg-slate-50">
+            <!-- Background Decoration -->
+            <div class="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+
+            <!-- VIEW: DASHBOARD -->
+            <div id="view-dashboard" class="flex-1 flex flex-col overflow-hidden fade-in">
+                <header class="px-8 py-6 flex justify-between items-center z-10 shrink-0">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">Project Overview</h2>
+                        <p class="text-slate-500 text-sm">Manage your team's content pipeline.</p>
                     </div>
-                    <span class="font-bold text-lg text-slate-800">Proof Buddy</span>
-                </div>
-                <div class="hidden md:flex gap-4 text-sm font-medium">
-                    <button onclick="showDashboard()" class="text-slate-600 hover:text-indigo-600">Dashboard</button>
-                    <button onclick="showArchived()" class="text-slate-600 hover:text-indigo-600">Archived</button>
-                </div>
-            </div>
-            <div class="flex items-center gap-4">
-                <div class="text-right hidden md:block">
-                    <div id="user-name" class="text-sm font-bold text-slate-700">User</div>
-                    <div id="user-email" class="text-xs text-slate-500">email@example.com</div>
-                </div>
-                <img id="user-avatar" src="" class="w-9 h-9 rounded-full border border-slate-200" alt="Avatar">
-                <button onclick="logout()" class="text-sm text-red-500 hover:underline">Sign Out</button>
-            </div>
-        </nav>
-
-        <!-- DASHBOARD VIEW -->
-        <div id="view-dashboard" class="flex-1 overflow-auto p-8 fade-in">
-            <div class="max-w-7xl mx-auto">
-                <div class="flex justify-between items-center mb-8">
-                    <h2 class="text-2xl font-bold text-slate-800">Dashboard</h2>
-                    <button onclick="startUpload()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-md flex items-center gap-2">
-                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-                        New Document
+                    <button onclick="startUpload()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/30 flex items-center gap-2 transition hover:-translate-y-0.5">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                        New Project
                     </button>
+                </header>
+
+                <div class="flex-1 overflow-auto px-8 pb-8 z-10">
+                    <!-- Stats Row -->
+                    <div class="grid grid-cols-4 gap-6 mb-8">
+                        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center font-bold text-xl" id="stat-total">0</div>
+                            <div><div class="text-xs text-slate-400 font-bold uppercase">Active Projects</div><div class="font-bold text-slate-700">Team Total</div></div>
+                        </div>
+                        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-xl" id="stat-due">0</div>
+                            <div><div class="text-xs text-slate-400 font-bold uppercase">Projects Due</div><div class="font-bold text-slate-700">This Week</div></div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full min-h-[500px]">
+                        <!-- TEAM PROJECTS -->
+                        <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
+                            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                                <h3 class="font-bold text-lg text-slate-800">Team Projects</h3>
+                                <div class="flex gap-2 text-xs">
+                                    <span class="flex items-center gap-1 text-slate-400"><span class="w-2 h-2 rounded-full bg-red-500"></span> Urgent</span>
+                                    <span class="flex items-center gap-1 text-slate-400"><span class="w-2 h-2 rounded-full bg-blue-400"></span> Normal</span>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-12 px-5 py-3 bg-slate-50/50 text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">
+                                <div class="col-span-1 text-center"></div>
+                                <div class="col-span-4">Project Name</div>
+                                <div class="col-span-2">Priority</div>
+                                <div class="col-span-2">Owner</div>
+                                <div class="col-span-3 text-right">Deadlines</div>
+                            </div>
+
+                            <div id="list-team-projects" class="divide-y divide-slate-50 p-2 overflow-y-auto scroller">
+                                <!-- JS Injected -->
+                            </div>
+                        </div>
+
+                        <!-- ASSIGNED TO ME -->
+                        <div class="bg-slate-900 rounded-2xl shadow-xl overflow-hidden flex flex-col text-white relative h-full">
+                            <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
+                            <div class="p-6 border-b border-white/10 relative z-10 shrink-0">
+                                <div class="flex justify-between items-center mb-1">
+                                    <h3 class="font-bold text-lg">Assigned to You</h3>
+                                    <span id="badge-assigned" class="bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+                                </div>
+                                <p class="text-slate-400 text-xs">Action required on these items.</p>
+                            </div>
+                            <div id="list-assigned-docs" class="p-4 space-y-3 relative z-10 overflow-y-auto scroller h-full">
+                                <!-- JS Injected -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: ARCHIVED -->
+            <div id="view-archived" class="hidden flex-1 overflow-auto p-8 fade-in">
+                <div class="max-w-5xl mx-auto">
+                    <div class="flex items-center gap-2 mb-6">
+                        <button onclick="showDashboard()" class="text-slate-400 hover:text-emerald-600">← Back</button>
+                        <h2 class="text-2xl font-bold text-slate-800">Archived Projects</h2>
+                    </div>
+                    <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+                        <div id="list-archived-docs" class="divide-y divide-slate-100"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: WIZARD (Upload/Edit) -->
+            <div id="view-wizard" class="hidden flex-1 overflow-auto p-8 fade-in bg-slate-100 flex justify-center">
+                <div class="max-w-2xl w-full bg-white rounded-2xl shadow-xl border border-slate-200 p-8 h-fit">
+                    <button onclick="showDashboard()" class="text-sm text-slate-400 hover:text-emerald-600 mb-6 flex items-center gap-1 font-bold">← Cancel</button>
+                    <h2 id="wizard-title" class="text-2xl font-bold mb-6 text-slate-800">Upload New Content</h2>
+                    
+                    <div class="space-y-6">
+                        <!-- Basic Info -->
+                        <div id="title-group">
+                            <label class="block text-sm font-bold text-slate-700 mb-2">Project Title</label>
+                            <input type="text" id="input-title" class="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-emerald-500 outline-none transition">
+                        </div>
+
+                        <div id="type-group" class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-2">Media Type</label>
+                                <select id="input-type" class="w-full border border-slate-300 rounded-lg p-3 bg-white outline-none">
+                                    <option value="signage">Printed Signage</option>
+                                    <option value="social">Social Media</option>
+                                    <option value="policy">Policy & Procedures</option>
+                                    <option value="digital">Digital Content</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-slate-700 mb-2">Priority</label>
+                                <select id="input-priority" class="w-full border border-slate-300 rounded-lg p-3 bg-white outline-none">
+                                    <option value="Normal">Normal</option>
+                                    <option value="High">High</option>
+                                    <option value="Urgent">Urgent 🔥</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Deadlines -->
+                        <div class="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Final Deadline</label>
+                                <input type="date" id="input-deadline-final" class="w-full bg-white border border-slate-300 rounded p-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Next Step Goal</label>
+                                <input type="date" id="input-deadline-next" class="w-full bg-white border border-slate-300 rounded p-2 text-sm">
+                            </div>
+                        </div>
+
+                        <!-- Context (Advanced) -->
+                        <div id="context-group" class="border-t pt-4">
+                            <label class="block text-sm font-bold text-slate-700 mb-2">Target Audience (Optional)</label>
+                            <input type="text" id="input-audience" placeholder="e.g., Senior Management, Gen Z" class="w-full border border-slate-300 rounded-lg p-3 text-sm">
+                        </div>
+
+                        <!-- File Drop -->
+                        <div class="border-2 border-dashed border-slate-300 rounded-xl p-10 text-center hover:bg-slate-50 cursor-pointer transition group" onclick="document.getElementById('file-upload').click()">
+                            <div class="bg-emerald-100 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            </div>
+                            <div id="file-preview-name" class="text-slate-600 font-medium">Click to upload document</div>
+                            <p class="text-xs text-slate-400 mt-1">PDF, JPG, PNG supported</p>
+                            <input type="file" id="file-upload" class="hidden" onchange="handleFilePreview(this)">
+                        </div>
+
+                        <button onclick="submitProject()" id="btn-submit-project" class="w-full bg-emerald-500 text-white py-4 rounded-xl font-bold hover:bg-emerald-600 transition shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
+                            Analyze & Save Project
+                        </button>
+                        <p id="upload-status" class="text-center text-sm text-emerald-600 font-medium mt-2 hidden flex items-center justify-center gap-2">
+                            <span class="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600"></span> Processing...
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: PROJECT DETAIL -->
+            <div id="view-project" class="hidden flex-1 flex flex-col overflow-hidden fade-in bg-slate-100">
+                <!-- Top Toolbar -->
+                <div class="bg-white border-b px-6 py-3 flex justify-between items-center shadow-sm shrink-0 z-10">
+                    <div class="flex items-center gap-4">
+                        <button onclick="showDashboard()" class="text-slate-400 hover:text-emerald-600 font-bold transition">← Back</button>
+                        <div class="border-l pl-4 border-slate-200">
+                            <h1 id="project-title-display" class="font-bold text-lg leading-tight text-slate-800">Project Title</h1>
+                            <div class="flex items-center gap-2 mt-0.5">
+                                <span id="project-status-badge" class="text-[10px] px-2 py-0.5 rounded bg-slate-200 text-slate-600 font-bold uppercase tracking-wide">Draft</span>
+                                <span id="project-priority-badge" class="text-[10px] px-2 py-0.5 rounded border font-bold uppercase tracking-wide">Normal</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-3" id="action-buttons">
+                        <!-- Dynamic Buttons -->
+                    </div>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <!-- Team Projects (Visible to All) -->
-                    <div class="lg:col-span-2 bg-white rounded-xl shadow border border-slate-200 overflow-hidden h-[600px] flex flex-col">
-                        <div class="p-4 border-b border-slate-100 bg-slate-50 font-semibold text-slate-700 flex justify-between items-center">
-                            <span>Team Projects (Public)</span>
-                            <span class="text-xs font-normal text-slate-500">Visible to team</span>
+                <div class="flex-1 flex overflow-hidden">
+                    <!-- Left: Content / Diff -->
+                    <div class="flex-1 overflow-auto p-6 flex flex-col items-center bg-slate-200/50">
+                        <div id="doc-container-wrapper" class="bg-white shadow-xl min-h-[800px] w-full max-w-4xl p-8 rounded-xl relative flex flex-col">
+                            <div class="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
+                                <h3 class="font-bold text-slate-700">Document Preview</h3>
+                                <div id="diff-toggle-msg" class="hidden text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">Visual Diff Active</div>
+                            </div>
+                            
+                            <!-- Visual Diff Container -->
+                            <div id="diff-view-container" class="hidden flex-1 relative bg-slate-100 rounded overflow-hidden border border-slate-200">
+                                <div class="diff-container" onmousemove="moveDiff(event)" ontouchmove="moveDiff(event)">
+                                     <img id="diff-img-old" class="diff-img opacity-50 grayscale" src="" alt="Old">
+                                     <div id="diff-resize" class="diff-resize">
+                                         <img id="diff-img-new" class="diff-img" src="" alt="New">
+                                     </div>
+                                     <div id="diff-handle" class="diff-handle">
+                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="15 18 9 12 15 6"/><polyline points="9 18 15 12 9 6"/></svg>
+                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Standard Container -->
+                            <div id="doc-view-container" class="flex-1 text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap"></div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Feedback -->
+                    <div class="w-[420px] bg-white border-l border-slate-200 flex flex-col overflow-hidden shadow-2xl z-20">
+                        <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+                            <span class="font-bold text-slate-700 flex items-center gap-2">
+                                <svg width="16" height="16" class="text-emerald-500" fill="none" stroke="currentColor" stroke-width="3"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                AI Analysis
+                            </span>
+                            <div id="verification-badge" class="hidden bg-emerald-100 text-emerald-700 text-[10px] px-2 py-1 rounded font-bold border border-emerald-200 uppercase">Verified Revision</div>
                         </div>
                         
-                        <!-- Table Header -->
-                        <div class="grid grid-cols-12 gap-4 p-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase">
-                            <div class="col-span-5">Project Name</div>
-                            <div class="col-span-3">Creator</div>
-                            <div class="col-span-3">Assigned To</div>
-                            <div class="col-span-1 text-right">Action</div>
+                        <div id="ai-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller bg-slate-50/30">
+                            <!-- Injected -->
                         </div>
-
-                        <div id="list-team-projects" class="flex-1 overflow-y-auto scroller">
-                            <div class="p-8 text-center text-slate-400">Loading projects...</div>
-                        </div>
-                    </div>
-
-                    <!-- Assigned to Me -->
-                    <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden h-[600px] flex flex-col border-t-4 border-t-indigo-500">
-                        <div class="p-4 border-b border-slate-100 bg-indigo-50 text-indigo-900 font-bold flex justify-between">
-                            <span>Assigned to Me</span>
-                            <span id="badge-assigned" class="bg-indigo-200 text-indigo-800 text-xs px-2 py-0.5 rounded-full hidden">0</span>
-                        </div>
-                        <div id="list-assigned-docs" class="flex-1 overflow-y-auto p-2 scroller">
-                            <div class="p-8 text-center text-slate-400">No pending reviews.</div>
+                        
+                        <div class="p-4 bg-white border-t border-slate-200 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)] shrink-0">
+                            <div class="font-bold text-slate-800 text-sm mb-2 flex items-center gap-2">
+                                <div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></div>
+                                Manager Feedback
+                            </div>
+                            <div id="manager-comments-display" class="text-sm text-slate-600 bg-slate-50 p-3 rounded border border-slate-100 min-h-[40px] mb-2 italic">No comments yet.</div>
+                            <textarea id="manager-input" class="w-full border border-slate-300 p-2 rounded text-sm hidden focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Type feedback here..."></textarea>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- ARCHIVED VIEW -->
-        <div id="view-archived" class="hidden flex-1 overflow-auto p-8 fade-in bg-slate-100">
-            <div class="max-w-5xl mx-auto">
-                <div class="flex items-center gap-2 mb-6">
-                    <button onclick="showDashboard()" class="text-slate-400 hover:text-indigo-600">← Back</button>
-                    <h2 class="text-2xl font-bold text-slate-800">Archived Projects</h2>
-                </div>
-                <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
-                    <div id="list-archived-docs" class="divide-y divide-slate-100">
-                        <div class="p-8 text-center text-slate-400">No archived projects found.</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- UPLOAD WIZARD VIEW -->
-        <div id="view-wizard" class="hidden flex-1 overflow-auto p-6 fade-in">
-             <div class="max-w-3xl mx-auto bg-white rounded-xl shadow-lg border border-slate-200 p-8">
-                 <button onclick="showDashboard()" class="text-sm text-slate-400 hover:text-indigo-600 mb-4 flex items-center gap-1">← Cancel</button>
-                 <h2 id="wizard-title" class="text-2xl font-bold mb-6">Upload New Content</h2>
-                 
-                 <div class="space-y-6">
-                     <div id="title-group">
-                         <label class="block text-sm font-medium text-slate-700 mb-2">Project Title</label>
-                         <input type="text" id="input-title" class="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none">
-                     </div>
-
-                     <div id="type-group">
-                        <label class="block text-sm font-medium text-slate-700 mb-2">Media Type</label>
-                        <select id="input-type" class="w-full border border-slate-300 rounded-lg p-3 bg-white">
-                            <option value="signage">Printed Signage</option>
-                            <option value="social">Social Media</option>
-                            <option value="policy">Policy & Procedures</option>
-                            <option value="digital">Digital Content</option>
-                        </select>
-                     </div>
-
-                     <div class="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:bg-slate-50 cursor-pointer transition" onclick="document.getElementById('file-upload').click()">
-                         <div id="file-preview-name" class="text-slate-600">Click to upload (Image/PDF/Doc)</div>
-                         <input type="file" id="file-upload" class="hidden" onchange="handleFilePreview(this)">
-                     </div>
-
-                     <button onclick="submitProject()" id="btn-submit-project" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition">
-                         Analyze & Save
-                     </button>
-                     <p id="upload-status" class="text-center text-sm text-slate-500 mt-2 hidden">Uploading & Analyzing...</p>
-                 </div>
-             </div>
-        </div>
-
-        <!-- PROJECT VIEW -->
-        <div id="view-project" class="hidden flex-1 overflow-hidden flex flex-col fade-in bg-slate-100">
-            <!-- Toolbar -->
-            <div class="bg-white border-b px-6 py-3 flex justify-between items-center shadow-sm">
-                <div class="flex items-center gap-4">
-                    <button onclick="showDashboard()" class="text-slate-400 hover:text-indigo-600 font-medium">← Back</button>
-                    <div class="border-l pl-4 border-slate-200">
-                        <h1 id="project-title-display" class="font-bold text-lg leading-tight text-slate-800">Project Title</h1>
-                        <span id="project-status-badge" class="text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-600">Draft</span>
-                    </div>
-                </div>
-                <div class="flex gap-2" id="action-buttons">
-                    <!-- Dynamic Buttons injected here -->
-                </div>
-            </div>
-
-            <div class="flex-1 flex overflow-hidden">
-                <!-- Left: Document -->
-                <div class="flex-1 overflow-auto p-6 flex justify-center bg-slate-200">
-                    <div id="doc-container" class="bg-white shadow-lg min-h-[800px] w-full max-w-4xl p-8 rounded relative">
-                        <!-- Content -->
-                    </div>
-                </div>
-
-                <!-- Right: Feedback Panel -->
-                <div class="w-[450px] bg-white border-l border-slate-200 flex flex-col overflow-hidden shadow-xl z-10">
-                    <div class="p-4 bg-slate-50 border-b flex justify-between items-center">
-                        <span class="font-bold text-slate-700">AI Analysis</span>
-                        <div id="verification-badge" class="hidden bg-green-100 text-green-700 text-xs px-2 py-1 rounded font-bold border border-green-200">Verified Revision</div>
-                    </div>
-                    
-                    <div id="ai-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller bg-slate-50/50">
-                        <!-- Suggestions -->
-                    </div>
-                    
-                    <div class="p-4 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                        <div class="font-bold text-indigo-900 text-sm mb-2 flex items-center gap-2">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                            Manager Comments
-                        </div>
-                        <div id="manager-comments-display" class="text-sm text-slate-600 bg-slate-50 p-3 rounded border border-slate-100 min-h-[40px] mb-2">No comments yet.</div>
-                        <textarea id="manager-input" class="w-full border p-2 rounded text-sm hidden focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Add feedback for the creator..."></textarea>
-                    </div>
-                </div>
-            </div>
-        </div>
-
+        </main>
     </div>
 
     <!-- MODALS -->
     
     <!-- Assign Modal -->
-    <div id="modal-assign" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center fade-in backdrop-blur-sm">
-        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform transition-all scale-100">
-            <h3 class="text-xl font-bold mb-4">Assign Reviewer</h3>
+    <div id="modal-assign" class="hidden fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center fade-in backdrop-blur-sm">
+        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl">
+            <h3 class="text-xl font-bold mb-4 brand-font">Assign Reviewer</h3>
             <p class="text-sm text-slate-500 mb-6">Select a team member to review this document.</p>
             <div id="user-list-container" class="grid grid-cols-3 gap-4 mb-6 max-h-60 overflow-y-auto scroller"></div>
-            <button onclick="closeModal('modal-assign')" class="w-full bg-slate-100 text-slate-600 py-3 rounded-lg font-medium hover:bg-slate-200">Cancel</button>
+            <button onclick="closeModal('modal-assign')" class="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition">Cancel</button>
         </div>
     </div>
 
     <!-- Checklist Modal -->
-    <div id="modal-checklist" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center fade-in backdrop-blur-sm">
+    <div id="modal-checklist" class="hidden fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center fade-in backdrop-blur-sm">
         <div class="bg-white rounded-2xl w-full max-w-lg p-8 shadow-2xl">
-            <h3 class="text-2xl font-bold mb-2">Final Approval Checklist</h3>
-            <p class="text-slate-500 mb-6 text-sm">Please confirm the following before approving.</p>
+            <h3 class="text-2xl font-bold mb-2 brand-font text-slate-800">Final Approval Checklist</h3>
+            <p class="text-slate-500 mb-6 text-sm">Please confirm all items before approving.</p>
             
             <div class="space-y-3 mb-8">
-                <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                    <input type="checkbox" class="approval-check w-5 h-5 text-indigo-600 rounded" onchange="validateChecklist()">
-                    <span class="text-slate-700">Grammar and spelling is accurate</span>
+                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition">
+                    <input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()">
+                    <span class="text-slate-700 font-medium">Grammar and spelling is accurate</span>
                 </label>
-                <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                    <input type="checkbox" class="approval-check w-5 h-5 text-indigo-600 rounded" onchange="validateChecklist()">
-                    <span class="text-slate-700">Images/Graphics represent message</span>
+                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition">
+                    <input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()">
+                    <span class="text-slate-700 font-medium">Images/Graphics represent message</span>
                 </label>
-                <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                    <input type="checkbox" class="approval-check w-5 h-5 text-indigo-600 rounded" onchange="validateChecklist()">
-                    <span class="text-slate-700">Dates and times are stated clearly</span>
+                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition">
+                    <input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()">
+                    <span class="text-slate-700 font-medium">Dates and times are stated clearly</span>
                 </label>
-                <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50">
-                    <input type="checkbox" class="approval-check w-5 h-5 text-indigo-600 rounded" onchange="validateChecklist()">
-                    <span class="text-slate-700">Terms and conditions are correct</span>
+                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition">
+                    <input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()">
+                    <span class="text-slate-700 font-medium">Terms and conditions are correct</span>
                 </label>
             </div>
 
             <div class="flex gap-3">
-                <button onclick="closeModal('modal-checklist')" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-lg font-medium">Cancel</button>
-                <button id="btn-confirm-approve" disabled onclick="executeApproval()" class="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">Approve Project</button>
+                <button onclick="closeModal('modal-checklist')" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition">Cancel</button>
+                <button id="btn-confirm-approve" disabled onclick="executeApproval()" class="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-bold hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-lg">Approve Project</button>
             </div>
         </div>
     </div>
 
-    <!-- FIREBASE MODULES -->
+    <!-- LOGIC -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, doc, getDoc, getDocs, updateDoc, setDoc, query, where, orderBy, onSnapshot, serverTimestamp, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
         import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
-        // CONFIGURATION
         const firebaseConfig = {
             apiKey: "AIzaSyAc4Vm815th4dUNmIbyMz631SirvAedkFg",
             authDomain: "ai-proofer-e4b94.firebaseapp.com",
@@ -279,19 +364,20 @@
         const storage = getStorage(app);
         const provider = new GoogleAuthProvider();
 
-        // GLOBAL STATE
         let currentUser = null;
         let currentProject = null;
         let isRevisionMode = false;
+        let originalImageSrc = null; // For diff
 
-        // --- AUTH LOGIC ---
-        window.signIn = () => {
-            signInWithPopup(auth, provider).catch(err => {
-                document.getElementById('login-error').innerText = err.message;
-                document.getElementById('login-error').classList.remove('hidden');
-            });
+        // SIDEBAR TOGGLE
+        window.toggleSidebar = () => {
+            const sb = document.getElementById('sidebar');
+            const icon = document.getElementById('toggle-icon');
+            sb.classList.toggle('collapsed');
+            icon.innerHTML = sb.classList.contains('collapsed') ? '<polyline points="9 18 15 12 9 6"/>' : '<polyline points="15 18 9 12 15 6"/>';
         };
 
+        window.signIn = () => signInWithPopup(auth, provider).catch(e => { document.getElementById('login-error').innerText = e.message; document.getElementById('login-error').classList.remove('hidden'); });
         window.logout = () => signOut(auth);
 
         onAuthStateChanged(auth, async (user) => {
@@ -308,9 +394,7 @@
                 document.getElementById('view-login').classList.add('hidden');
                 document.getElementById('view-app').classList.remove('hidden');
                 document.getElementById('user-name').innerText = user.displayName;
-                document.getElementById('user-email').innerText = user.email;
                 document.getElementById('user-avatar').src = user.photoURL;
-                
                 loadDashboard();
             } else {
                 currentUser = null;
@@ -319,106 +403,113 @@
             }
         });
 
-        // --- DASHBOARD LOGIC ---
-        window.showDashboard = () => {
-            hideAllViews();
-            document.getElementById('view-dashboard').classList.remove('hidden');
-            loadDashboard();
-        };
-
-        window.showArchived = () => {
-            hideAllViews();
-            document.getElementById('view-archived').classList.remove('hidden');
-            loadArchived();
-        };
+        // DASHBOARD
+        window.showDashboard = () => { hideAllViews(); document.getElementById('view-dashboard').classList.remove('hidden'); loadDashboard(); };
+        window.showArchived = () => { hideAllViews(); document.getElementById('view-archived').classList.remove('hidden'); loadArchived(); };
 
         async function loadDashboard() {
             if(!currentUser) return;
 
-            // 1. Team Projects (Public, All non-archived)
-            const qTeam = query(collection(db, "projects"));
-            onSnapshot(qTeam, (snapshot) => {
+            // Stats Logic: Count Projects Due This Week
+            const today = new Date();
+            const firstDay = new Date(today.setDate(today.getDate() - today.getDay() + 1)); // Monday
+            const lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 7)); // Sunday
+            
+            // 1. Team Projects
+            onSnapshot(query(collection(db, "projects")), (snapshot) => {
                 const container = document.getElementById('list-team-projects');
                 container.innerHTML = '';
-                
                 const docs = [];
+                let activeCount = 0;
+                let dueThisWeek = 0;
+
                 snapshot.forEach(doc => {
                     const d = doc.data();
-                    if(d.status !== 'Archived') docs.push({ id: doc.id, ...d });
+                    if(d.status !== 'Archived') {
+                        docs.push({ id: doc.id, ...d });
+                        activeCount++;
+                        
+                        // Check Deadline
+                        if(d.deadlineFinal) {
+                            const due = new Date(d.deadlineFinal);
+                            if(due >= firstDay && due <= lastDay) dueThisWeek++;
+                        }
+                    }
                 });
-                // Sort client-side
-                docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-
-                if(docs.length === 0) container.innerHTML = '<div class="p-8 text-center text-slate-400">No active projects.</div>';
                 
+                document.getElementById('stat-total').innerText = activeCount;
+                document.getElementById('stat-due').innerText = dueThisWeek;
+
+                docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                
+                if(docs.length === 0) container.innerHTML = '<div class="p-8 text-center text-slate-400">No active projects.</div>';
                 docs.forEach(data => renderTeamRow(data, data.id, container));
             });
 
-            // 2. Assigned to Me (Filter: Reviewer == Me AND Not Approved/Archived)
-            const qAssigned = query(collection(db, "projects"), where("reviewerId", "==", currentUser.uid));
-            onSnapshot(qAssigned, (snapshot) => {
+            // 2. Assigned
+            onSnapshot(query(collection(db, "projects"), where("reviewerId", "==", currentUser.uid)), (snapshot) => {
                 const container = document.getElementById('list-assigned-docs');
                 const badge = document.getElementById('badge-assigned');
                 container.innerHTML = '';
-                
                 const docs = [];
                 snapshot.forEach(doc => {
                     const d = doc.data();
-                    if(d.status !== 'Archived' && d.status !== 'Approved') {
-                        docs.push({ id: doc.id, ...d });
-                    }
+                    if(d.status !== 'Archived' && d.status !== 'Approved') docs.push({ id: doc.id, ...d });
                 });
-                docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-
+                
                 if(docs.length === 0) {
-                    container.innerHTML = '<div class="p-8 text-center text-slate-400">All caught up! No pending reviews.</div>';
-                    badge.classList.add('hidden');
+                    container.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm">All caught up!</div>';
+                    badge.innerText = "0";
                 } else {
                     badge.innerText = docs.length;
-                    badge.classList.remove('hidden');
                     docs.forEach(data => renderCard(data, data.id, container));
                 }
             });
         }
 
         async function loadArchived() {
-            const qArchived = query(collection(db, "projects"), where("status", "==", "Archived"));
-            onSnapshot(qArchived, (snapshot) => {
+            onSnapshot(query(collection(db, "projects"), where("status", "==", "Archived")), (snapshot) => {
                 const container = document.getElementById('list-archived-docs');
                 container.innerHTML = '';
-                if(snapshot.empty) {
-                    container.innerHTML = '<div class="p-8 text-center text-slate-400">No archived projects found.</div>';
-                    return;
-                }
-                const docs = [];
-                snapshot.forEach(doc => docs.push({ id: doc.id, ...doc.data() }));
-                docs.sort((a, b) => (b.archivedAt?.seconds || 0) - (a.archivedAt?.seconds || 0)); // Sort by archived date
-                
-                docs.forEach(data => renderTeamRow(data, data.id, container, true));
+                if(snapshot.empty) { container.innerHTML = '<div class="p-8 text-center text-slate-400">No archived projects.</div>'; return; }
+                snapshot.forEach(doc => renderTeamRow(doc.data(), doc.id, container, true));
             });
         }
 
         function renderTeamRow(data, id, container, isArchived = false) {
             const div = document.createElement('div');
-            div.className = "grid grid-cols-12 gap-4 p-4 border-b border-slate-100 hover:bg-slate-50 items-center transition group";
+            div.className = "grid grid-cols-12 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center transition group cursor-pointer";
             
-            // Only clickable on title/info to allow delete button to work separately
-            const navigate = () => loadProject(id);
+            // Priority Tag
+            let priorityBadge = "";
+            if(data.priority === "Urgent") priorityBadge = `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 uppercase tracking-wide">Urgent 🔥</span>`;
+            else if(data.priority === "High") priorityBadge = `<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold border border-orange-200 uppercase tracking-wide">High</span>`;
+            else priorityBadge = `<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 uppercase tracking-wide">Normal</span>`;
 
-            let assignedHTML = `<span class="text-slate-400 italic text-xs">Unassigned</span>`;
-            if(data.reviewerName) assignedHTML = `<span class="bg-indigo-50 text-indigo-700 px-2 py-1 rounded text-xs font-bold">${data.reviewerName}</span>`;
+            // Dates
+            const nextDate = data.deadlineNext ? new Date(data.deadlineNext).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
+            const finalDate = data.deadlineFinal ? new Date(data.deadlineFinal).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
+
+            // Permissions for Delete
+            const canDelete = data.creatorId === currentUser.uid || data.reviewerId === currentUser.uid;
+            const deleteBtn = canDelete ? 
+                `<button onclick="deleteProject('${id}', '${data.storagePath || ''}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition" title="Delete Project"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` 
+                : `<div class="w-8"></div>`;
 
             div.innerHTML = `
-                <div class="col-span-5 cursor-pointer font-medium text-slate-800" onclick="loadProject('${id}')">${data.title} <span class="ml-2 text-xs font-normal text-slate-400">(${data.mediaType})</span></div>
-                <div class="col-span-3 cursor-pointer flex items-center gap-2 text-sm text-slate-600" onclick="loadProject('${id}')">
-                    <img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full border border-slate-200">
-                    ${data.creatorName.split(' ')[0]}
+                <div class="col-span-1 text-center" onclick="event.stopPropagation()">${deleteBtn}</div>
+                <div class="col-span-4" onclick="loadProject('${id}')">
+                    <div class="font-bold text-slate-700 text-sm">${data.title}</div>
+                    <div class="text-[10px] text-slate-400 mt-0.5 font-bold uppercase tracking-wide">${data.mediaType}</div>
                 </div>
-                <div class="col-span-3 cursor-pointer" onclick="loadProject('${id}')">${assignedHTML}</div>
-                <div class="col-span-1 text-right">
-                    <button onclick="deleteProject('${id}', '${data.storagePath}')" class="text-slate-300 hover:text-red-500 p-2 rounded hover:bg-red-50 transition" title="Delete Project">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    </button>
+                <div class="col-span-2" onclick="loadProject('${id}')">${priorityBadge}</div>
+                <div class="col-span-2 flex items-center gap-2" onclick="loadProject('${id}')">
+                    <img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full border border-white shadow-sm">
+                    <span class="text-xs font-bold text-slate-600">${data.creatorName.split(' ')[0]}</span>
+                </div>
+                <div class="col-span-3 text-right text-xs" onclick="loadProject('${id}')">
+                    ${data.deadlineNext ? `<div class="text-slate-600 font-medium">⏱️ Next: <span class="text-emerald-600">${nextDate}</span></div>` : ''}
+                    ${data.deadlineFinal ? `<div class="text-slate-400 mt-0.5">🏁 Final: ${finalDate}</div>` : ''}
                 </div>
             `;
             container.appendChild(div);
@@ -426,70 +517,61 @@
 
         function renderCard(data, id, container) {
             const div = document.createElement('div');
-            div.className = "p-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer flex justify-between items-center transition bg-white";
+            div.className = "bg-white/10 p-4 rounded-xl border border-white/5 hover:bg-white/15 transition cursor-pointer group";
             div.onclick = () => loadProject(id);
             
-            let statusColor = "bg-amber-100 text-amber-700"; // Default pending
-            if(data.status === 'Changes Requested') statusColor = "bg-red-100 text-red-700";
-
+            let badge = "";
+            if(data.priority === "Urgent") badge = `<span class="bg-red-500/20 text-red-300 text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-red-500/30">Urgent 🔥</span>`;
+            
             div.innerHTML = `
-                <div>
-                    <div class="font-semibold text-slate-800">${data.title}</div>
-                    <div class="text-xs text-slate-500">Waiting for you</div>
+                <div class="flex justify-between items-start mb-2">
+                    ${badge}
+                    <span class="text-emerald-400 font-bold text-[10px] uppercase ml-auto">${data.status}</span>
                 </div>
-                <span class="text-xs px-2 py-1 rounded-full font-bold ${statusColor}">${data.status}</span>
+                <h4 class="font-bold text-sm mb-3 text-white">${data.title}</h4>
+                <div class="flex justify-between items-end">
+                    <div class="text-xs text-slate-400">From: <span class="text-white font-bold">${data.creatorName.split(' ')[0]}</span></div>
+                    <div class="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-500/50">${data.creatorName[0]}</div>
+                </div>
             `;
             container.appendChild(div);
         }
 
-        // --- DELETION LOGIC ---
-        window.deleteProject = async (id, storagePath) => {
-            if(!confirm("⚠️ ARE YOU SURE? \n\nThis will permanently delete the project, all comments, and the file from the server. This action cannot be undone.")) return;
-
+        // --- DELETION ---
+        window.deleteProject = async (id, path) => {
+            if(!confirm("⚠️ PERMANENT DELETE\nAre you sure you want to remove this project? This cannot be undone.")) return;
             try {
-                // 1. Delete Firestore Doc
                 await deleteDoc(doc(db, "projects", id));
-                
-                // 2. Delete Storage File (if exists)
-                if(storagePath) {
-                    try {
-                        const fileRef = ref(storage, storagePath);
-                        await deleteObject(fileRef);
-                    } catch(e) { console.warn("File already gone or permission denied"); }
-                }
+                if(path) { try { await deleteObject(ref(storage, path)); } catch(e){} }
                 alert("Project deleted.");
-            } catch(e) {
-                alert("Error deleting: " + e.message);
-            }
+            } catch(e) { alert("Error: " + e.message); }
         };
 
-        // --- UPLOAD LOGIC ---
+        // --- UPLOAD & WIZARD ---
         window.startUpload = (revisionMode = false) => {
             isRevisionMode = revisionMode;
             hideAllViews();
             document.getElementById('view-wizard').classList.remove('hidden');
             
-            const titleInput = document.getElementById('input-title');
-            const typeInput = document.getElementById('input-type');
-            
+            const t = document.getElementById('input-title');
             if(isRevisionMode && currentProject) {
-                document.getElementById('wizard-title').innerText = `Upload Revision for "${currentProject.title}"`;
-                titleInput.value = currentProject.title + " (v2)";
-                titleInput.disabled = true; // Lock title on revision
-                document.getElementById('title-group').classList.add('opacity-50');
-                document.getElementById('type-group').classList.add('hidden'); // Hide type selection
-                document.getElementById('btn-submit-project').innerText = "Analyze Revision & Submit";
+                document.getElementById('wizard-title').innerText = "Upload Revision";
+                t.value = currentProject.title + " (v2)";
+                t.disabled = true;
+                // Hide context fields for revision
+                document.getElementById('type-group').classList.add('hidden');
+                document.getElementById('context-group').classList.add('hidden');
+                document.getElementById('btn-submit-project').innerText = "Verify Revision";
             } else {
                 document.getElementById('wizard-title').innerText = "Upload New Content";
-                titleInput.value = '';
-                titleInput.disabled = false;
-                document.getElementById('title-group').classList.remove('opacity-50');
+                t.value = "";
+                t.disabled = false;
                 document.getElementById('type-group').classList.remove('hidden');
+                document.getElementById('context-group').classList.remove('hidden');
                 document.getElementById('btn-submit-project').innerText = "Analyze & Save Project";
             }
-            
             document.getElementById('file-upload').value = '';
-            document.getElementById('file-preview-name').innerText = "Click to upload (Image/PDF/Doc)";
+            document.getElementById('file-preview-name').innerText = "Click to upload document";
         };
 
         let fileToUpload = null;
@@ -499,7 +581,6 @@
             if(input.files[0]) {
                 fileToUpload = input.files[0];
                 document.getElementById('file-preview-name').innerText = fileToUpload.name;
-                document.getElementById('file-preview-name').classList.add('text-indigo-600', 'font-bold');
                 const reader = new FileReader();
                 reader.onload = (e) => fileBase64 = e.target.result;
                 reader.readAsDataURL(fileToUpload);
@@ -508,311 +589,285 @@
 
         window.submitProject = async () => {
             const title = document.getElementById('input-title').value;
-            const type = isRevisionMode ? currentProject.mediaType : document.getElementById('input-type').value;
             const btn = document.getElementById('btn-submit-project');
             const statusMsg = document.getElementById('upload-status');
 
-            if(!fileToUpload) return alert("Please select a file");
+            if(!fileToUpload) return alert("Please upload a file");
 
             btn.disabled = true;
             statusMsg.classList.remove('hidden');
-            statusMsg.innerText = isRevisionMode ? "Verifying fixes with AI..." : "Analyzing with AI...";
 
             try {
                 const contentRaw = fileBase64.split(',')[1];
                 const isBinary = fileToUpload.type.startsWith('image/') || fileToUpload.type === 'application/pdf';
-
-                let payload = {
+                const type = document.getElementById('input-type').value;
+                
+                const payload = {
                     mode: 'analyze',
                     content: contentRaw,
-                    mediaType: type,
+                    mediaType: isRevisionMode ? currentProject.mediaType : type,
                     mimeType: fileToUpload.type,
-                    isBinary: isBinary
+                    isBinary: isBinary,
+                    targetAudience: document.getElementById('input-audience').value,
+                    priority: document.getElementById('input-priority').value
                 };
 
-                // REVISION LOGIC: Send accepted edits for verification
                 if(isRevisionMode && currentProject.aiSuggestions) {
-                    const acceptedEdits = currentProject.aiSuggestions.filter(s => s.status === 'accepted');
-                    if(acceptedEdits.length > 0) {
+                    const accepted = currentProject.aiSuggestions.filter(s => s.status === 'accepted');
+                    if(accepted.length > 0) {
                         payload.mode = 'verify';
-                        payload.expectedEdits = acceptedEdits;
+                        payload.expectedEdits = accepted;
                     }
                 }
 
-                const aiResponse = await fetch('/.netlify/functions/proof-read', {
-                    method: 'POST',
-                    body: JSON.stringify(payload)
-                });
+                const res = await fetch('/.netlify/functions/proof-read', { method: 'POST', body: JSON.stringify(payload) });
+                if(!res.ok) throw new Error("AI Analysis Failed");
+                let suggestions = await res.json();
 
-                if(!aiResponse.ok) throw new Error("AI Analysis failed");
-                let results = await aiResponse.json();
+                // Format suggestions if verify mode
+                if(payload.mode === 'verify') {
+                    suggestions = suggestions.map((r, i) => ({
+                        id: i, original: "Pending Fix", fix: r.fix, 
+                        reason: r.status === 'verified' ? "✅ Verified Fix" : "❌ Fix Failed",
+                        status: r.status === 'verified' ? 'accepted' : 'rejected' // Auto status based on result
+                    }));
+                } else {
+                    suggestions = suggestions.map(s => ({...s, status: 'pending'}));
+                }
 
-                statusMsg.innerText = "Saving to Database...";
-
-                // Upload File
+                // Storage
                 const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
                 await uploadString(storageRef, fileBase64, 'data_url');
-                const downloadURL = await getDownloadURL(storageRef);
+                const url = await getDownloadURL(storageRef);
+
+                const commonData = {
+                    fileURL: url,
+                    storagePath: storageRef.fullPath,
+                    fileMime: fileToUpload.type,
+                    aiSuggestions: suggestions,
+                    priority: document.getElementById('input-priority').value,
+                    deadlineFinal: document.getElementById('input-deadline-final').value,
+                    deadlineNext: document.getElementById('input-deadline-next').value
+                };
 
                 if(isRevisionMode) {
-                    // Update Existing Project
-                    // If Verify Mode, we merge results. Ideally, we should structure this better,
-                    // but for now let's append Verification results to comments or replace suggestions
-                    
-                    // Note: If 'verify' mode, results structure is different (fix/status/comment)
-                    // We will map this back to a standard format for display
-                    let newSuggestions = results;
-                    if(payload.mode === 'verify') {
-                        newSuggestions = results.map((r, i) => ({
-                            id: i,
-                            original: "Pending Fix", 
-                            fix: r.fix,
-                            reason: r.status === 'verified' ? "✅ Verified Fix" : "❌ Fix Failed",
-                            confidence: r.status === 'verified' ? 'High' : 'Low'
-                        }));
-                    }
-
                     await updateDoc(doc(db, "projects", currentProject.id), {
-                        fileURL: downloadURL,
-                        storagePath: storageRef.fullPath, // Update path so we delete correct file later
-                        status: 'Needs Review', // Send back to reviewer
-                        aiSuggestions: newSuggestions,
-                        managerComments: "", // Clear old comments
+                        ...commonData,
+                        status: 'Needs Review',
+                        managerComments: '',
                         isRevision: true
                     });
                     loadProject(currentProject.id);
-
                 } else {
-                    // Create New
                     const docRef = await addDoc(collection(db, "projects"), {
                         title: title,
                         mediaType: type,
-                        fileURL: downloadURL,
-                        storagePath: storageRef.fullPath,
-                        fileMime: fileToUpload.type,
                         status: 'Draft',
                         creatorId: currentUser.uid,
                         creatorName: currentUser.displayName,
                         creatorPhoto: currentUser.photoURL,
                         createdAt: serverTimestamp(),
-                        aiSuggestions: results.map(r => ({...r, status: 'pending'})), // Init status
                         reviewerId: null,
-                        managerComments: ""
+                        ...commonData
                     });
                     loadProject(docRef.id);
                 }
 
             } catch(e) {
                 console.error(e);
-                alert("Error: " + e.message);
+                alert(e.message);
                 btn.disabled = false;
                 statusMsg.classList.add('hidden');
             }
         };
 
-
-        // --- PROJECT VIEW LOGIC ---
+        // --- PROJECT VIEW ---
         window.loadProject = async (id) => {
             hideAllViews();
             document.getElementById('view-project').classList.remove('hidden');
-            
-            onSnapshot(doc(db, "projects", id), (docSnap) => {
-                if(docSnap.exists()) {
-                    currentProject = { id: docSnap.id, ...docSnap.data() };
+            onSnapshot(doc(db, "projects", id), (snap) => {
+                if(snap.exists()) {
+                    currentProject = { id: snap.id, ...snap.data() };
                     renderProjectView();
-                } else {
-                    showDashboard(); // Doc deleted
-                }
+                } else { showDashboard(); }
             });
         };
 
         function renderProjectView() {
             const p = currentProject;
             document.getElementById('project-title-display').innerText = p.title;
-            const badge = document.getElementById('project-status-badge');
-            badge.innerText = p.status;
+            document.getElementById('project-status-badge').innerText = p.status;
+            document.getElementById('project-priority-badge').innerText = p.priority || 'Normal';
             
-            const verifyBadge = document.getElementById('verification-badge');
-            if(p.isRevision) verifyBadge.classList.remove('hidden');
-            else verifyBadge.classList.add('hidden');
-
-            // Render Document
-            const container = document.getElementById('doc-container');
-            container.innerHTML = '';
+            if(p.isRevision) document.getElementById('verification-badge').classList.remove('hidden');
+            
+            // Doc & Diff Logic
+            const docContainer = document.getElementById('doc-view-container');
+            const diffContainer = document.getElementById('diff-view-container');
+            const diffMsg = document.getElementById('diff-toggle-msg');
+            docContainer.innerHTML = '';
+            
             if(p.status === 'Archived') {
-                container.innerHTML = `<div class="p-12 text-center text-slate-500 italic flex flex-col items-center gap-4"><svg class="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>Project Archived. File deleted.</div>`;
-            } else if(p.fileMime && p.fileMime.startsWith('image/')) {
-                container.innerHTML = `<img src="${p.fileURL}" class="max-w-full h-auto mx-auto shadow rounded">`;
-            } else if(p.fileMime === 'application/pdf') {
-                container.innerHTML = `<iframe src="${p.fileURL}" class="w-full h-full border-0 rounded"></iframe>`;
+                docContainer.innerHTML = '<div class="p-12 text-center text-slate-400 italic">Project Archived.</div>';
+                diffContainer.classList.add('hidden');
+            } else if(p.isRevision && p.fileMime.startsWith('image/') && originalImageSrc) {
+                // Visual Diff Active if we have original in memory (simple session logic)
+                // Ideally original URL should be stored in DB for robust diffing across reloads
+                docContainer.classList.add('hidden');
+                diffContainer.classList.remove('hidden');
+                diffMsg.classList.remove('hidden');
+                document.getElementById('diff-img-new').src = p.fileURL;
+                // Note: In real production, 'originalImageSrc' needs to come from DB prev version
+                // For now, if user just uploaded it, it's there. If reload, fallback to single view.
+                if(originalImageSrc) document.getElementById('diff-img-old').src = originalImageSrc;
+                else {
+                    // Fallback
+                    docContainer.classList.remove('hidden');
+                    diffContainer.classList.add('hidden');
+                    docContainer.innerHTML = `<img src="${p.fileURL}" class="max-w-full h-auto mx-auto shadow-lg rounded">`;
+                }
             } else {
-                container.innerHTML = `<div class="p-4 whitespace-pre-wrap">Content available.</div>`;
+                // Standard View
+                docContainer.classList.remove('hidden');
+                diffContainer.classList.add('hidden');
+                diffMsg.classList.add('hidden');
+                
+                if(p.fileMime.startsWith('image/')) {
+                    docContainer.innerHTML = `<img src="${p.fileURL}" class="max-w-full h-auto mx-auto shadow-lg rounded">`;
+                    originalImageSrc = p.fileURL; // Cache for potential diff later in session
+                } else if(p.fileMime === 'application/pdf') {
+                    docContainer.innerHTML = `<iframe src="${p.fileURL}" class="w-full h-full border-0 rounded"></iframe>`;
+                } else {
+                    docContainer.innerHTML = `<div class="p-8">File available for download.</div>`;
+                }
             }
 
-            // Render AI Suggestions (With Accept/Reject)
+            // Suggestions List
             const list = document.getElementById('ai-feedback-list');
             list.innerHTML = '';
             
             const isReviewer = p.reviewerId === currentUser.uid;
-            const canEdit = p.creatorId === currentUser.uid || isReviewer;
+            const canEdit = (p.creatorId === currentUser.uid || isReviewer) && p.status !== 'Approved' && p.status !== 'Archived';
 
-            (p.aiSuggestions || []).forEach((s, index) => {
-                let statusClass = 'status-pending border-l-slate-300';
+            (p.aiSuggestions || []).forEach((s, idx) => {
+                let statusClass = 'status-pending';
                 if(s.status === 'accepted') statusClass = 'status-accepted';
                 if(s.status === 'rejected') statusClass = 'status-rejected';
 
-                let buttonsHTML = '';
-                if(canEdit && p.status !== 'Archived' && p.status !== 'Approved') {
-                    buttonsHTML = `
-                        <div class="flex gap-2 mt-2">
-                            <button onclick="updateSuggestion(${index}, 'accepted')" class="flex-1 bg-white border border-green-200 text-green-700 hover:bg-green-50 text-xs py-1.5 rounded font-bold transition">Accept</button>
-                            <button onclick="updateSuggestion(${index}, 'rejected')" class="flex-1 bg-white border border-red-200 text-red-700 hover:bg-red-50 text-xs py-1.5 rounded font-bold transition">Reject</button>
-                        </div>
-                    `;
+                let btns = '';
+                if(canEdit) {
+                    btns = `
+                    <div class="flex gap-2 mt-2 pt-2 border-t border-slate-100">
+                        <button onclick="updateSuggestion(${idx}, 'accepted')" class="flex-1 text-emerald-600 hover:bg-emerald-50 py-1 rounded text-xs font-bold transition">Accept ✔️</button>
+                        <button onclick="updateSuggestion(${idx}, 'rejected')" class="flex-1 text-red-500 hover:bg-red-50 py-1 rounded text-xs font-bold transition">Reject ❌</button>
+                    </div>`;
                 }
 
                 list.innerHTML += `
-                    <div class="suggestion-card border border-slate-200 rounded p-4 bg-white text-sm shadow-sm ${statusClass}">
+                    <div class="suggestion-card bg-white p-4 rounded-lg shadow-sm border border-slate-100 ${statusClass}">
                         <div class="flex justify-between mb-1">
-                            <span class="text-slate-400 text-[10px] font-bold uppercase tracking-wide">${s.reason}</span>
-                            ${s.status !== 'pending' ? `<span class="text-[10px] font-bold uppercase ${s.status === 'accepted' ? 'text-green-600' : 'text-red-500'}">${s.status}</span>` : ''}
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wide">${s.reason}</span>
+                            ${s.status !== 'pending' ? `<span class="text-[10px] font-bold uppercase ${s.status === 'accepted' ? 'text-emerald-600' : 'text-red-500'}">${s.status}</span>` : ''}
                         </div>
-                        <div class="mb-2 text-base">
-                            <span class="line-through text-red-400 decoration-2">${s.original}</span> 
-                            <span class="text-slate-400 mx-1">→</span> 
-                            <span class="text-green-600 font-bold bg-green-50 px-1 rounded">${s.fix}</span>
+                        <div class="text-sm text-slate-700">
+                            <span class="line-through text-red-400 decoration-2 decoration-red-200">${s.original}</span>
+                            <span class="text-slate-300 mx-1">→</span>
+                            <span class="font-bold text-emerald-600 bg-emerald-50 px-1 rounded">${s.fix}</span>
                         </div>
-                        ${buttonsHTML}
+                        ${btns}
                     </div>
                 `;
             });
 
+            // Manager Comments
             document.getElementById('manager-comments-display').innerText = p.managerComments || "No comments yet.";
 
-            // Dynamic Buttons
+            // Actions
             const actions = document.getElementById('action-buttons');
             actions.innerHTML = '';
-
-            const isCreator = p.creatorId === currentUser.uid;
-
-            if(isCreator && p.status === 'Draft') {
-                actions.innerHTML = `<button onclick="openAssignModal()" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-700 font-bold shadow-sm">Assign Reviewer</button>`;
-            } else if(isCreator && p.status === 'Changes Requested') {
-                actions.innerHTML = `<button onclick="startUpload(true)" class="bg-indigo-600 text-white px-4 py-2 rounded text-sm font-bold shadow-sm">Upload Revision</button>`;
-            } else if(isReviewer && p.status === 'Needs Review') {
+            
+            if(p.creatorId === currentUser.uid) {
+                if(p.status === 'Draft') actions.innerHTML = `<button onclick="openAssignModal()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Assign Reviewer</button>`;
+                if(p.status === 'Changes Requested') actions.innerHTML = `<button onclick="startUpload(true)" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Upload Revision</button>`;
+            } 
+            if(isReviewer && p.status === 'Needs Review') {
                 document.getElementById('manager-input').classList.remove('hidden');
                 document.getElementById('manager-input').value = p.managerComments || "";
-                
                 actions.innerHTML = `
-                    <button onclick="submitReview('Changes Requested')" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded text-sm hover:bg-red-50 font-bold">Request Changes</button>
-                    <button onclick="openChecklist()" class="bg-green-600 text-white px-4 py-2 rounded text-sm hover:bg-green-700 font-bold shadow-sm">Approve Concept</button>
+                    <button onclick="submitReview('Changes Requested')" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition">Request Changes</button>
+                    <button onclick="openChecklist()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Approve Concept</button>
                 `;
-            } else if (p.status === 'Approved') {
-                 if (isCreator || isReviewer) {
-                     actions.innerHTML = `<button onclick="finalizeProject()" class="bg-slate-800 text-white px-4 py-2 rounded text-sm hover:bg-slate-900 shadow-lg font-bold">Final Commit (Archive)</button>`;
-                 }
+            }
+            if(p.status === 'Approved' && (p.creatorId === currentUser.uid || isReviewer)) {
+                actions.innerHTML = `<button onclick="finalizeProject()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-900 transition shadow-lg">Final Commit (Archive)</button>`;
             }
         }
 
-        // --- INTERACTION LOGIC ---
-        window.updateSuggestion = async (index, status) => {
-            // Update local object then push to DB
-            const newSuggestions = [...currentProject.aiSuggestions];
-            newSuggestions[index].status = status;
-            
-            await updateDoc(doc(db, "projects", currentProject.id), {
-                aiSuggestions: newSuggestions
-            });
+        // --- INTERACTIONS ---
+        window.updateSuggestion = async (i, s) => {
+            const newS = [...currentProject.aiSuggestions];
+            newS[i].status = s;
+            await updateDoc(doc(db, "projects", currentProject.id), { aiSuggestions: newS });
         };
 
-        // --- ASSIGN LOGIC ---
+        window.moveDiff = (e) => {
+            const rect = document.querySelector('.diff-container').getBoundingClientRect();
+            const x = (e.clientX || e.touches[0].clientX) - rect.left;
+            const p = Math.max(0, Math.min(100, (x / rect.width) * 100));
+            document.getElementById('diff-resize').style.width = p + '%';
+            document.getElementById('diff-handle').style.left = p + '%';
+        };
+
+        // --- ASSIGN ---
         window.openAssignModal = async () => {
             document.getElementById('modal-assign').classList.remove('hidden');
             const list = document.getElementById('user-list-container');
-            list.innerHTML = '<div class="col-span-3 text-center text-slate-400">Loading users...</div>';
-            
+            list.innerHTML = 'Loading...';
             const snaps = await getDocs(collection(db, "users"));
             list.innerHTML = '';
-            
-            snaps.forEach(docSnap => {
-                const u = docSnap.data();
-                // Filter out self if desired, or keep to allow self-assign
+            snaps.forEach(s => {
+                const u = s.data();
+                if(u.uid === currentUser.uid) return;
                 const div = document.createElement('div');
-                div.className = "user-bubble cursor-pointer flex flex-col items-center p-3 rounded-xl border border-transparent transition bg-slate-50 hover:bg-white hover:shadow-md";
-                div.onclick = () => assignUser(u);
-                div.innerHTML = `
-                    <img src="${u.photoURL}" class="w-12 h-12 rounded-full mb-2 border-2 border-white shadow-sm">
-                    <span class="text-xs font-bold text-center leading-tight text-slate-700">${u.displayName ? u.displayName.split(' ')[0] : 'User'}</span>
-                `;
+                div.className = "user-bubble cursor-pointer flex flex-col items-center p-3 rounded-xl border border-transparent transition bg-slate-50 hover:bg-white hover:shadow-md border hover:border-emerald-100";
+                div.onclick = async () => {
+                    if(confirm(`Assign ${u.displayName}?`)) {
+                        await updateDoc(doc(db, "projects", currentProject.id), { reviewerId: u.uid, reviewerName: u.displayName, status: 'Needs Review' });
+                        closeModal('modal-assign');
+                    }
+                };
+                div.innerHTML = `<img src="${u.photoURL}" class="w-12 h-12 rounded-full mb-2 shadow-sm"><span class="text-xs font-bold text-slate-700">${u.displayName.split(' ')[0]}</span>`;
                 list.appendChild(div);
             });
         };
 
+        // --- APPROVALS ---
+        window.openChecklist = () => { document.getElementById('modal-checklist').classList.remove('hidden'); document.getElementById('btn-confirm-approve').disabled = true; document.querySelectorAll('.approval-check').forEach(c => c.checked = false); };
         window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
-
-        async function assignUser(user) {
-            if(!confirm(`Assign ${user.displayName} as reviewer?`)) return;
-            
-            await updateDoc(doc(db, "projects", currentProject.id), {
-                reviewerId: user.uid,
-                reviewerName: user.displayName,
-                status: 'Needs Review'
-            });
-            closeModal('modal-assign');
-        }
-
-        // --- CHECKLIST & APPROVAL LOGIC ---
-        window.openChecklist = () => {
-            document.getElementById('modal-checklist').classList.remove('hidden');
-            // Reset checkboxes
-            document.querySelectorAll('.approval-check').forEach(c => c.checked = false);
-            document.getElementById('btn-confirm-approve').disabled = true;
-        };
-
-        window.validateChecklist = () => {
-            const allChecked = Array.from(document.querySelectorAll('.approval-check')).every(c => c.checked);
-            document.getElementById('btn-confirm-approve').disabled = !allChecked;
-        };
-
+        window.validateChecklist = () => { document.getElementById('btn-confirm-approve').disabled = !Array.from(document.querySelectorAll('.approval-check')).every(c => c.checked); };
+        
         window.executeApproval = () => {
             submitReview('Approved');
             closeModal('modal-checklist');
         };
 
         window.submitReview = async (status) => {
-            const comments = document.getElementById('manager-input').value;
-            await updateDoc(doc(db, "projects", currentProject.id), {
-                status: status,
-                managerComments: comments
-            });
+            await updateDoc(doc(db, "projects", currentProject.id), { status: status, managerComments: document.getElementById('manager-input').value });
         };
 
         window.finalizeProject = async () => {
-            if(!confirm("Confirm Final Approval? This will archive the project and DELETE the source file from the server to save storage space.")) return;
+            if(!confirm("Archive and delete source file?")) return;
             try {
-                if(currentProject.storagePath) {
-                    const fileRef = ref(storage, currentProject.storagePath);
-                    await deleteObject(fileRef);
-                }
-                await updateDoc(doc(db, "projects", currentProject.id), {
-                    status: 'Archived',
-                    fileURL: null, 
-                    archivedAt: serverTimestamp()
-                });
-                alert("Project finalized. Source file deleted.");
+                if(currentProject.storagePath) await deleteObject(ref(storage, currentProject.storagePath));
+                await updateDoc(doc(db, "projects", currentProject.id), { status: 'Archived', fileURL: null, archivedAt: serverTimestamp() });
+                alert("Project Archived.");
                 showDashboard();
-            } catch (e) {
-                console.error(e);
-                alert("Error: " + e.message);
-            }
+            } catch(e) { alert(e.message); }
         };
 
-        // HELPER
         function hideAllViews() {
-            const views = ['view-login', 'view-dashboard', 'view-wizard', 'view-project', 'view-archived'];
-            views.forEach(id => document.getElementById(id).classList.add('hidden'));
+            ['view-login', 'view-dashboard', 'view-wizard', 'view-project', 'view-archived'].forEach(v => document.getElementById(v).classList.add('hidden'));
         }
-
     </script>
 </body>
 </html>
