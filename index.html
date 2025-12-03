@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProoferAI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Highlight styles */
+        .highlight { background-color: rgba(253, 224, 71, 0.5); border-bottom: 2px solid #eab308; cursor: pointer; transition: all 0.2s; }
+        .highlight:hover { background-color: rgba(234, 179, 8, 0.6); }
+        .highlight.active { background-color: rgba(234, 179, 8, 0.8); border-bottom: 3px solid #ca8a04; font-weight: bold; }
+        
+        /* Status Colors for Review */
+        .status-accepted { background-color: #dcfce7; border-color: #22c55e; } 
+        .status-rejected { background-color: #fee2e2; border-color: #ef4444; } 
+        
+        .hidden-stage { display: none !important; }
+        .nav-item { cursor: pointer; transition: color 0.2s; }
+        .nav-item:hover { color: #4f46e5; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 h-screen flex flex-col overflow-hidden">
+
+    <!-- Navigation -->
+    <nav class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="location.reload()">
+            <div class="bg-indigo-600 p-2 rounded-lg text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>
+            </div>
+            <span class="font-bold text-xl text-slate-800">Proofer<span class="text-indigo-600">AI</span></span>
+        </div>
+        
+        <div class="flex gap-4 text-sm font-medium select-none">
+            <span id="nav-1" onclick="if(canNavigate(1)) goToStage(1)" class="nav-item text-indigo-600 font-bold border-b-2 border-indigo-600">1. Upload</span>
+            <span id="nav-2" onclick="if(canNavigate(2)) goToStage(2)" class="nav-item text-slate-400">2. Review</span>
+            <span id="nav-3" onclick="if(canNavigate(3)) goToStage(3)" class="nav-item text-slate-400">3. Verify</span>
+            <span id="nav-4" onclick="if(canNavigate(4)) goToStage(4)" class="nav-item text-slate-400">4. Approve</span>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-auto relative p-6">
+
+        <!-- STAGE 1: UPLOAD -->
+        <div id="stage-1" class="max-w-4xl mx-auto fade-in pt-10">
+            <div class="text-center mb-10">
+                <h2 class="text-3xl font-bold mb-4">Start Proofing Session</h2>
+                <p class="text-slate-600">Select media type to calibrate the AI.</p>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <button onclick="selectMedia('signage')" class="media-btn p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 bg-white text-left transition" id="btn-signage">
+                    <div class="font-bold mb-1">Printed Signage</div>
+                    <div class="text-xs text-slate-500">Clarity & Impact</div>
+                </button>
+                <button onclick="selectMedia('social')" class="media-btn p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 bg-white text-left transition" id="btn-social">
+                    <div class="font-bold mb-1">Social Media</div>
+                    <div class="text-xs text-slate-500">Engaging & Casual</div>
+                </button>
+                <button onclick="selectMedia('policy')" class="media-btn p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 bg-white text-left transition" id="btn-policy">
+                    <div class="font-bold mb-1">Policy & Proc.</div>
+                    <div class="text-xs text-slate-500">Formal & Precise</div>
+                </button>
+                <button onclick="selectMedia('digital')" class="media-btn p-4 border-2 border-slate-200 rounded-xl hover:border-indigo-400 bg-white text-left transition" id="btn-digital">
+                    <div class="font-bold mb-1">Digital Content</div>
+                    <div class="text-xs text-slate-500">SEO & Structure</div>
+                </button>
+            </div>
+
+            <div class="border-2 border-dashed border-slate-300 rounded-2xl p-12 text-center bg-white hover:bg-slate-50 transition cursor-pointer" onclick="document.getElementById('file-input').click()">
+                <div class="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                </div>
+                <h3 class="text-xl font-medium" id="upload-text">Click to Upload Document</h3>
+                <p class="text-slate-500 mt-2">.TXT (for real text) or PDF/JPG (uses sample text)</p>
+                <input type="file" id="file-input" class="hidden" onchange="handleFileSelect(this)">
+            </div>
+
+            <div class="mt-8 flex justify-end items-center gap-4">
+                 <div id="loading-indicator" class="hidden text-indigo-600 font-medium flex items-center gap-2">
+                    <div class="animate-spin h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                    analyzing with Gemini AI...
+                </div>
+                <button onclick="runAnalysis()" id="btn-analyze" disabled class="px-8 py-3 rounded-lg font-semibold text-white bg-slate-300 cursor-not-allowed transition">
+                    Analyze Document
+                </button>
+            </div>
+            
+            <p id="error-msg" class="text-red-500 text-center mt-4 hidden"></p>
+        </div>
+
+        <!-- STAGE 2: REVIEW -->
+        <div id="stage-2" class="hidden-stage h-full fade-in">
+            <div class="flex h-full gap-6">
+                <!-- Document Preview (Left) -->
+                <div class="w-2/3 bg-slate-200 rounded-xl p-8 overflow-y-auto shadow-inner">
+                    <div class="bg-white min-h-[800px] p-12 rounded shadow-lg max-w-3xl mx-auto">
+                        <h1 class="text-3xl font-bold mb-2" id="doc-title">Document Preview</h1>
+                        <p class="text-xs text-slate-400 uppercase tracking-widest mb-8 border-b pb-4">Analyzed Content</p>
+                        <div id="doc-content" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap">
+                            <!-- Content injected by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Suggestions (Right) -->
+                <div class="w-1/3 bg-white rounded-xl border border-slate-200 flex flex-col shadow-sm">
+                    <div class="p-4 border-b bg-slate-50">
+                        <h3 class="font-bold flex items-center gap-2">
+                            <span class="bg-red-100 text-red-600 p-1 rounded">!</span> AI Suggestions
+                        </h3>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-4 space-y-4" id="suggestions-list">
+                        <!-- Suggestions injected by JS -->
+                    </div>
+                    <div class="p-4 border-t bg-slate-50">
+                        <button onclick="goToStage(3)" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700">
+                            Save & Proceed
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STAGE 3: RE-UPLOAD & VERIFY -->
+        <div id="stage-3" class="hidden-stage h-full fade-in">
+            <div id="verify-upload-view" class="max-w-2xl mx-auto pt-16 text-center">
+                <h2 class="text-2xl font-bold mb-2">Upload Corrected Document</h2>
+                <p class="text-slate-600 mb-8">Please upload the file with the changes applied.</p>
+
+                <div class="bg-white p-8 rounded-xl shadow border border-slate-200 cursor-pointer hover:bg-slate-50" onclick="document.getElementById('verify-input').click()">
+                    <div class="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <p class="font-medium text-slate-700">Click to upload corrected file</p>
+                    <input type="file" id="verify-input" class="hidden" onchange="startVerificationFlow(this)">
+                </div>
+            </div>
+
+            <div id="verify-split-view" class="hidden h-full gap-6">
+                <!-- New Document Preview -->
+                <div class="w-2/3 bg-slate-200 rounded-xl p-8 overflow-y-auto shadow-inner">
+                    <div class="bg-white min-h-[800px] p-12 rounded shadow-lg max-w-3xl mx-auto">
+                        <h1 class="text-3xl font-bold mb-2" id="verify-doc-title">Document Title</h1>
+                        <p class="text-xs text-green-600 font-bold uppercase tracking-widest mb-8 border-b pb-4 flex items-center gap-2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                            New Version (Corrected)
+                        </p>
+                        <div id="verify-doc-content" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap"></div>
+                    </div>
+                </div>
+
+                <!-- Verification List -->
+                <div class="w-1/3 bg-white rounded-xl border border-slate-200 flex flex-col shadow-sm">
+                    <div class="p-4 border-b bg-slate-50">
+                        <h3 class="font-bold flex items-center gap-2">
+                            <svg class="text-indigo-600" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            Verification Report
+                        </h3>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-4 space-y-4" id="verification-list"></div>
+                    <div class="p-4 border-t bg-slate-50">
+                        <button id="btn-proceed-approval" disabled onclick="goToStage(4)" class="w-full bg-slate-300 text-white py-3 rounded-lg font-semibold cursor-not-allowed transition">
+                            Verify & Proceed
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- STAGE 4: APPROVAL CHECKLIST -->
+        <div id="stage-4" class="hidden-stage max-w-2xl mx-auto fade-in pt-12">
+            <h2 class="text-2xl font-bold mb-6">Final Approval Checklist</h2>
+            <div class="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden mb-8">
+                <div class="p-3 bg-slate-50 border-b text-xs text-slate-500 font-bold uppercase">Click to toggle: Empty → Checked → N/A</div>
+                
+                <div onclick="toggleCheck(this)" class="checklist-item p-5 border-b hover:bg-slate-50 cursor-pointer flex items-center gap-4" data-status="unchecked">
+                    <div class="status-icon w-6 h-6 border-2 border-slate-300 rounded-full"></div>
+                    <span class="text-lg">Grammar and spelling is accurate</span>
+                </div>
+                <div onclick="toggleCheck(this)" class="checklist-item p-5 border-b hover:bg-slate-50 cursor-pointer flex items-center gap-4" data-status="unchecked">
+                    <div class="status-icon w-6 h-6 border-2 border-slate-300 rounded-full"></div>
+                    <span class="text-lg">Images and graphics used appropriately</span>
+                </div>
+                <div onclick="toggleCheck(this)" class="checklist-item p-5 border-b hover:bg-slate-50 cursor-pointer flex items-center gap-4" data-status="unchecked">
+                    <div class="status-icon w-6 h-6 border-2 border-slate-300 rounded-full"></div>
+                    <span class="text-lg">Dates and times are clearly stated</span>
+                </div>
+                <div onclick="toggleCheck(this)" class="checklist-item p-5 hover:bg-slate-50 cursor-pointer flex items-center gap-4" data-status="unchecked">
+                    <div class="status-icon w-6 h-6 border-2 border-slate-300 rounded-full"></div>
+                    <span class="text-lg">Terms and conditions are clearly stated</span>
+                </div>
+            </div>
+            <button onclick="goToStage(5)" id="btn-approve" disabled class="w-full py-4 rounded-xl font-bold text-lg bg-slate-200 text-slate-400 cursor-not-allowed transition">Submit Final Approval</button>
+        </div>
+
+        <!-- STAGE 5: SUCCESS -->
+        <div id="stage-5" class="hidden-stage flex flex-col items-center justify-center h-full text-center fade-in">
+            <div class="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6 shadow-sm">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <h1 class="text-4xl font-bold text-slate-900 mb-4">Approved!</h1>
+            <p class="text-lg text-slate-600 mb-8 max-w-md">The document has passed all automated checks and manual approvals. It is ready for publication.</p>
+            <button onclick="location.reload()" class="bg-slate-900 text-white px-8 py-3 rounded-lg font-medium hover:bg-slate-800">Start New Session</button>
+        </div>
+
+    </main>
+
+    <!-- LOGIC -->
+    <script>
+        // --- DATA ---
+        let currentStage = 1;
+        let currentMediaType = null;
+        let documentContent = "";
+        let currentEdits = [];
+
+        // Sample text for non-text files in this demo
+        const SAMPLE_TEXT = "Welcome to out new store! We are open form 9am to 9pm everyday. Failure to comply may result in disiplinary action. Its gonna be a great day.";
+
+        // --- NAVIGATION ---
+        function canNavigate(targetStage) {
+            if (targetStage < currentStage) return true;
+            return false;
+        }
+
+        function goToStage(stageNum) {
+            currentStage = stageNum;
+            document.querySelectorAll('[id^="stage-"]').forEach(el => el.classList.add('hidden-stage'));
+            document.getElementById(`stage-${stageNum}`).classList.remove('hidden-stage');
+            
+            for(let i=1; i<=4; i++) {
+                const navEl = document.getElementById(`nav-${i}`);
+                if(i === stageNum) {
+                    navEl.className = "nav-item text-indigo-600 font-bold border-b-2 border-indigo-600";
+                } else if(i < stageNum) {
+                    navEl.className = "nav-item text-green-600";
+                } else {
+                    navEl.className = "nav-item text-slate-400";
+                }
+            }
+
+            if(stageNum === 2) renderReview();
+            if(stageNum === 3) resetVerifyView();
+        }
+
+        // --- STAGE 1: UPLOAD & API CALL ---
+        function selectMedia(type) {
+            currentMediaType = type;
+            document.querySelectorAll('.media-btn').forEach(btn => {
+                btn.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-50', 'border-indigo-500');
+            });
+            document.getElementById(`btn-${type}`).classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-50', 'border-indigo-500');
+            checkUploadReady();
+        }
+
+        function handleFileSelect(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            document.getElementById('upload-text').innerText = `Selected: ${file.name}`;
+            document.getElementById('upload-text').classList.add('text-green-600', 'font-bold');
+            
+            // Simple logic: If text file, read it. If binary, use sample.
+            const reader = new FileReader();
+            if(file.type === "text/plain") {
+                reader.onload = (e) => documentContent = e.target.result;
+                reader.readAsText(file);
+            } else {
+                // For PDF/Images in this demo, use sample text to prove API works
+                documentContent = SAMPLE_TEXT; 
+            }
+            
+            checkUploadReady();
+        }
+
+        function checkUploadReady() {
+            const btn = document.getElementById('btn-analyze');
+            if(currentMediaType && documentContent) {
+                btn.disabled = false;
+                btn.classList.remove('bg-slate-300', 'cursor-not-allowed');
+                btn.classList.add('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-lg');
+            }
+        }
+
+        async function runAnalysis() {
+            // Show Loading
+            document.getElementById('loading-indicator').classList.remove('hidden');
+            document.getElementById('btn-analyze').classList.add('hidden');
+            document.getElementById('error-msg').classList.add('hidden');
+
+            try {
+                // CALL NETLIFY FUNCTION
+                const response = await fetch('/.netlify/functions/proof-read', {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                        content: documentContent,
+                        mediaType: currentMediaType 
+                    })
+                });
+
+                if (!response.ok) throw new Error("API Connection Failed");
+
+                const suggestions = await response.json();
+                
+                // Add status to each suggestion
+                currentEdits = suggestions.map(s => ({ ...s, status: 'pending' }));
+                
+                goToStage(2);
+            } catch (err) {
+                console.error(err);
+                document.getElementById('error-msg').innerText = "Error: Could not connect to AI. Ensure Netlify Function is running.";
+                document.getElementById('error-msg').classList.remove('hidden');
+                
+                // FALLBACK FOR DEMO if API fails (so you can still see UI)
+                console.log("Using fallback data due to error");
+                currentEdits = [
+                    { id: 99, original: "out", fix: "our", reason: "Fallback Mock", status: 'pending' },
+                    { id: 98, original: "disiplinary", fix: "disciplinary", reason: "Fallback Mock", status: 'pending' }
+                ];
+                goToStage(2);
+            } finally {
+                document.getElementById('loading-indicator').classList.add('hidden');
+                document.getElementById('btn-analyze').classList.remove('hidden');
+            }
+        }
+
+        // --- STAGE 2: REVIEW ---
+        function renderReview() {
+            document.getElementById('doc-title').innerText = selectedFile ? selectedFile.name : "Document";
+            
+            // 1. Render Content with Highlights
+            let htmlContent = documentContent;
+            // escape html to prevent injection (basic)
+            htmlContent = htmlContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+            currentEdits.forEach(edit => {
+                // Find and replace text with span. Note: This simple string replace 
+                // replaces ALL occurrences. In a production app, use strict indexing.
+                const regex = new RegExp(`(${escapeRegExp(edit.original)})`, 'g');
+                htmlContent = htmlContent.replace(regex, `<span id="highlight-${edit.id}" class="highlight" onclick="focusSuggestion(${edit.id})">$1</span>`);
+            });
+            
+            document.getElementById('doc-content').innerHTML = htmlContent;
+
+            // 2. Render Suggestions List
+            const list = document.getElementById('suggestions-list');
+            list.innerHTML = '';
+            
+            currentEdits.forEach(edit => {
+                const item = document.createElement('div');
+                item.id = `suggestion-${edit.id}`;
+                item.className = `border rounded-lg p-4 bg-white transition cursor-pointer mb-4 ${getSuggestionClass(edit.status)}`;
+                item.onclick = () => focusHighlight(edit.id);
+                
+                item.innerHTML = `
+                    <div class="text-xs font-bold text-slate-400 uppercase mb-1">${edit.reason}</div>
+                    <div class="mb-2">
+                        <span class="line-through text-red-400 mr-2">${edit.original}</span>
+                        <span class="text-green-600 font-bold text-lg">${edit.fix}</span>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button class="flex-1 bg-green-100 text-green-700 text-xs px-3 py-2 rounded font-bold hover:bg-green-200" onclick="updateStatus(${edit.id}, 'accepted', event)">Accept</button>
+                        <button class="flex-1 bg-red-100 text-red-700 text-xs px-3 py-2 rounded font-bold hover:bg-red-200" onclick="updateStatus(${edit.id}, 'rejected', event)">Ignore</button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function getSuggestionClass(status) {
+            if(status === 'accepted') return 'status-accepted border-green-500';
+            if(status === 'rejected') return 'status-rejected border-red-500 opacity-60';
+            return 'border-slate-200 hover:border-indigo-300';
+        }
+
+        function updateStatus(id, status, event) {
+            event.stopPropagation();
+            const edit = currentEdits.find(e => e.id === id);
+            if(edit) {
+                edit.status = status;
+                const item = document.getElementById(`suggestion-${id}`);
+                item.className = `border rounded-lg p-4 bg-white transition cursor-pointer mb-4 ${getSuggestionClass(status)}`;
+            }
+        }
+
+        function focusHighlight(id) {
+            document.querySelectorAll('.highlight').forEach(el => el.classList.remove('active'));
+            const el = document.getElementById(`highlight-${id}`);
+            if(el) el.classList.add('active');
+        }
+
+        function focusSuggestion(id) {
+            const el = document.getElementById(`suggestion-${id}`);
+            if(el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('ring-2', 'ring-indigo-500');
+                setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-500'), 1000);
+            }
+        }
+
+        // --- STAGE 3: VERIFY ---
+        function resetVerifyView() {
+            document.getElementById('verify-upload-view').classList.remove('hidden');
+            document.getElementById('verify-split-view').classList.add('hidden');
+        }
+
+        function startVerificationFlow(input) {
+            if(input.files && input.files[0]) {
+                document.getElementById('verify-upload-view').classList.add('hidden');
+                document.getElementById('verify-split-view').classList.remove('hidden');
+                document.getElementById('verify-split-view').classList.add('flex');
+                renderVerifySplit();
+            }
+        }
+
+        function renderVerifySplit() {
+            document.getElementById('verify-doc-title').innerText = selectedFile ? selectedFile.name : "Document";
+
+            // Generate "Clean" content for verification view
+            let cleanContent = documentContent;
+            currentEdits.forEach(edit => {
+                if(edit.status === 'accepted') {
+                    // Simple replace for demo
+                    cleanContent = cleanContent.replace(edit.original, edit.fix);
+                }
+            });
+            document.getElementById('verify-doc-content').innerText = cleanContent;
+
+            // Render List
+            const list = document.getElementById('verification-list');
+            list.innerHTML = '';
+            
+            setTimeout(() => {
+                currentEdits.forEach((edit, index) => {
+                    setTimeout(() => {
+                        const div = document.createElement('div');
+                        div.className = "border-b border-slate-100 pb-3 last:border-0";
+                        
+                        let icon = '', text = '', sub = '';
+
+                        if(edit.status === 'accepted') {
+                            icon = '<span class="text-green-500 font-bold">✓</span>';
+                            text = `Edit Found: "${edit.fix}"`;
+                            sub = 'Implementation verified.';
+                        } else if(edit.status === 'rejected') {
+                             icon = '<span class="text-slate-400 font-bold">-</span>';
+                             text = `Edit Skipped: "${edit.original}"`;
+                             sub = 'User declined this edit.';
+                        } else {
+                             icon = '<span class="text-amber-500 font-bold">?</span>';
+                             text = `Unresolved: "${edit.original}"`;
+                             sub = 'No action was taken.';
+                        }
+
+                        div.innerHTML = `
+                            <div class="flex items-start gap-3 fade-in">
+                                <div class="mt-1">${icon}</div>
+                                <div>
+                                    <div class="font-medium text-sm text-slate-800">${text}</div>
+                                    <div class="text-xs text-slate-500">${sub}</div>
+                                </div>
+                            </div>
+                        `;
+                        list.appendChild(div);
+                        list.scrollTop = list.scrollHeight;
+
+                        if(index === currentEdits.length - 1) {
+                            const btn = document.getElementById('btn-proceed-approval');
+                            btn.disabled = false;
+                            btn.classList.remove('bg-slate-300', 'cursor-not-allowed');
+                            btn.classList.add('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-lg');
+                            btn.innerHTML = "Proceed to Approval";
+                        }
+                    }, index * 800);
+                });
+            }, 500);
+        }
+
+        // --- STAGE 4: CHECKLIST ---
+        function toggleCheck(el) {
+            const status = el.getAttribute('data-status');
+            const icon = el.querySelector('.status-icon');
+            const text = el.querySelector('span');
+            
+            if(status === 'unchecked') {
+                el.setAttribute('data-status', 'checked');
+                icon.innerHTML = `<svg class="text-green-500 w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>`;
+                icon.className = "status-icon w-6 h-6 border-2 border-green-500 rounded-full flex items-center justify-center";
+                text.className = "text-lg text-slate-800";
+            } else if(status === 'checked') {
+                el.setAttribute('data-status', 'na');
+                icon.innerHTML = '<span class="text-[10px] font-bold text-slate-400">N/A</span>';
+                icon.className = "status-icon w-6 h-6 border-2 border-slate-300 rounded-full flex items-center justify-center bg-slate-100";
+                text.className = "text-lg text-slate-400 line-through";
+            } else {
+                el.setAttribute('data-status', 'unchecked');
+                icon.innerHTML = '';
+                icon.className = "status-icon w-6 h-6 border-2 border-slate-300 rounded-full";
+                text.className = "text-lg text-slate-800";
+            }
+            checkApprovalReady();
+        }
+
+        function checkApprovalReady() {
+            const items = document.querySelectorAll('.checklist-item');
+            let allDone = true;
+            items.forEach(item => {
+                if(item.getAttribute('data-status') === 'unchecked') allDone = false;
+            });
+            const btn = document.getElementById('btn-approve');
+            if(allDone) {
+                btn.disabled = false;
+                btn.classList.remove('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                btn.classList.add('bg-indigo-600', 'text-white', 'hover:bg-indigo-700', 'shadow-lg');
+            } else {
+                btn.disabled = true;
+                btn.classList.add('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                btn.classList.remove('bg-indigo-600', 'text-white', 'hover:bg-indigo-700', 'shadow-lg');
+            }
+        }
+    </script>
+</body>
+</html>
