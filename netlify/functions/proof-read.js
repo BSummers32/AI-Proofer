@@ -23,12 +23,9 @@ exports.handler = async (event, context) => {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // START: Model Selection
-    // We will try the standard 1.5 Flash. 
-    // If this fails, the 'catch' block below will tell us what IS available.
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); 
-    // END: Model Selection
-
+    // UPDATED: Using 'gemini-2.5-flash' based on your available models list
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
+    
     let systemPrompt = "";
     
     if (mode === "verify") {
@@ -40,8 +37,16 @@ exports.handler = async (event, context) => {
         Return ONLY a raw JSON array of objects with keys: "fix", "status" ('verified'/'failed'), "comment".
       `;
     } else {
+      let toneInstruction = "";
+      switch (mediaType) {
+        case "signage": toneInstruction = "Focus on brevity, high impact, and clarity."; break;
+        case "social": toneInstruction = "Focus on engagement, hashtags, and a casual/fun tone."; break;
+        case "policy": toneInstruction = "Focus on professional, formal, and legally precise language."; break;
+        default: toneInstruction = "Focus on readability and grammar.";
+      }
+
       systemPrompt = `
-        You are a professional content editor for ${mediaType}.
+        You are a professional content editor for ${mediaType}. ${toneInstruction}
         Return ONLY a raw JSON array of objects with keys: "id", "original", "fix", "reason".
       `;
     }
@@ -72,7 +77,6 @@ exports.handler = async (event, context) => {
     // --- DIAGNOSTICS: FETCH AVAILABLE MODELS ---
     let diagnosticMsg = "";
     try {
-        // This manually asks Google "What models can I use?"
         const listReq = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
         const listData = await listReq.json();
         if (listData.models) {
