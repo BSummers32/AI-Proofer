@@ -22,6 +22,12 @@
         .hidden-stage { display: none !important; }
         .nav-item { cursor: pointer; transition: color 0.2s; }
         .nav-item:hover { color: #4f46e5; }
+
+        /* Visual Diff Slider Styles */
+        .diff-container { position: relative; width: 100%; height: 600px; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 0.5rem; }
+        .diff-img { position: absolute; top: 0; left: 0; height: 100%; width: 100%; object-fit: contain; object-position: left top;}
+        .diff-resize { position: absolute; top: 0; left: 0; height: 100%; width: 50%; overflow: hidden; border-right: 2px solid #4f46e5; z-index: 10; }
+        .diff-handle { position: absolute; bottom: 0; right: -12px; width: 24px; height: 24px; background: #4f46e5; border-radius: 50%; cursor: ew-resize; z-index: 20; display: flex; align-items: center; justify-content: center; color: white; top: 50%; transform: translateY(-50%); }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 h-screen flex flex-col overflow-hidden">
@@ -30,7 +36,7 @@
     <nav class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div class="flex items-center gap-2 cursor-pointer" onclick="location.reload()">
             <div class="bg-indigo-600 p-2 rounded-lg text-white">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>
             </div>
             <span class="font-bold text-xl text-slate-800">Proofer<span class="text-indigo-600">AI</span></span>
         </div>
@@ -47,10 +53,10 @@
     <main class="flex-1 overflow-auto relative p-6">
 
         <!-- STAGE 1: UPLOAD -->
-        <div id="stage-1" class="max-w-4xl mx-auto fade-in pt-10">
+        <div id="stage-1" class="max-w-5xl mx-auto fade-in pt-10 pb-10">
             <div class="text-center mb-10">
-                <h2 class="text-3xl font-bold mb-4">Start Proofing Session</h2>
-                <p class="text-slate-600">Select media type to calibrate the AI.</p>
+                <h2 class="text-3xl font-bold mb-2">Start Proofing Session</h2>
+                <p class="text-slate-600">Select media type and context to calibrate the AI.</p>
             </div>
 
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -72,6 +78,26 @@
                 </button>
             </div>
 
+            <!-- Advanced Context Settings -->
+            <div class="bg-indigo-50 rounded-xl p-6 mb-8 border border-indigo-100">
+                <h3 class="font-bold text-indigo-900 mb-4 flex items-center gap-2">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    Advanced AI Context
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-indigo-800 mb-1">Target Audience</label>
+                        <input type="text" id="target-audience" placeholder="e.g., Senior Executives, Gen Z, Medical Professionals" 
+                            class="w-full p-2 rounded border border-indigo-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-indigo-800 mb-1">Brand Style Guide (Optional)</label>
+                        <textarea id="style-guide" rows="1" placeholder="e.g., Use Oxford commas, avoid passive voice, authoritative tone." 
+                            class="w-full p-2 rounded border border-indigo-200 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"></textarea>
+                    </div>
+                </div>
+            </div>
+
             <div class="border-2 border-dashed border-slate-300 rounded-2xl p-12 text-center bg-white hover:bg-slate-50 transition cursor-pointer" onclick="document.getElementById('file-input').click()">
                 <div class="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -91,7 +117,7 @@
                 </button>
             </div>
             
-            <p id="error-msg" class="text-red-600 bg-red-50 p-3 rounded border border-red-200 text-center mt-4 hidden font-medium"></p>
+            <p id="error-msg" class="text-red-500 text-center mt-4 hidden"></p>
         </div>
 
         <!-- STAGE 2: REVIEW -->
@@ -142,20 +168,37 @@
                     <span class="text-indigo-600 font-medium">AI is verifying changes...</span>
                 </div>
                 
-                <!-- Add Verify Error Message Area -->
                 <p id="verify-error-msg" class="text-red-600 bg-red-50 p-3 rounded border border-red-200 text-center mt-4 hidden font-medium"></p>
             </div>
 
             <div id="verify-split-view" class="hidden h-full gap-6">
-                <!-- New Document Preview -->
+                <!-- Visual Diff / New Document Preview -->
                 <div class="w-2/3 bg-slate-200 rounded-xl p-8 overflow-y-auto shadow-inner">
-                    <div class="bg-white min-h-[800px] p-12 rounded shadow-lg max-w-3xl mx-auto">
-                        <h1 class="text-3xl font-bold mb-2" id="verify-doc-title">Document Title</h1>
-                        <p class="text-xs text-green-600 font-bold uppercase tracking-widest mb-8 border-b pb-4 flex items-center gap-2">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                            New Version (Corrected)
-                        </p>
-                        <div id="verify-doc-wrapper" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap"></div>
+                    <div class="bg-white min-h-[800px] p-8 rounded shadow-lg max-w-3xl mx-auto flex flex-col">
+                        <div class="flex justify-between items-center mb-6 pb-4 border-b">
+                            <h1 class="text-xl font-bold" id="verify-doc-title">Verification Mode</h1>
+                            <div id="diff-toggle-msg" class="text-xs font-bold text-indigo-600 uppercase tracking-widest hidden">Visual Diff Active</div>
+                        </div>
+                        
+                        <!-- Diff Container for Images/PDFs -->
+                        <div id="diff-container-wrapper" class="hidden flex-1 relative">
+                             <p class="text-sm text-slate-500 mb-2 text-center">Drag slider to compare Original vs New</p>
+                             <div class="diff-container" onmousemove="moveDiff(event)" ontouchmove="moveDiff(event)">
+                                 <!-- Original (Background) -->
+                                 <img id="diff-img-old" class="diff-img opacity-50 grayscale" src="" alt="Old Version">
+                                 <!-- New (Foreground, resized width) -->
+                                 <div id="diff-resize" class="diff-resize">
+                                     <img id="diff-img-new" class="diff-img" src="" alt="New Version">
+                                 </div>
+                                 <div id="diff-handle" class="diff-handle">
+                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="15 18 9 12 15 6"/></svg>
+                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="9 18 15 12 9 6"/></svg>
+                                 </div>
+                             </div>
+                        </div>
+
+                        <!-- Text Container -->
+                        <div id="verify-doc-wrapper" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap flex-1"></div>
                     </div>
                 </div>
 
@@ -226,6 +269,9 @@
         let isBinaryFile = false;
         let currentEdits = [];
 
+        // For Visual Diff
+        let originalImageSrc = null;
+
         // --- NAVIGATION ---
         function canNavigate(targetStage) {
             if (targetStage < currentStage) return true;
@@ -278,6 +324,8 @@
                 reader.onload = (e) => {
                     const result = e.target.result;
                     fileContent = result.split(',')[1]; 
+                    // Save for visual diff later
+                    originalImageSrc = result; 
                     checkUploadReady();
                 };
                 reader.readAsDataURL(file);
@@ -304,6 +352,9 @@
             document.getElementById('loading-indicator').classList.remove('hidden');
             document.getElementById('btn-analyze').classList.add('hidden');
             document.getElementById('error-msg').classList.add('hidden');
+            
+            const targetAudience = document.getElementById('target-audience').value;
+            const styleGuide = document.getElementById('style-guide').value;
 
             try {
                 const response = await fetch('/.netlify/functions/proof-read', {
@@ -313,7 +364,9 @@
                         content: fileContent,
                         mediaType: currentMediaType,
                         mimeType: fileMimeType,
-                        isBinary: isBinaryFile
+                        isBinary: isBinaryFile,
+                        targetAudience,
+                        styleGuide
                     })
                 });
 
@@ -374,8 +427,17 @@
                 item.className = `border rounded-lg p-4 bg-white transition cursor-pointer mb-4 ${getSuggestionClass(edit.status)}`;
                 if(!isBinaryFile) item.onclick = () => focusHighlight(edit.id);
                 
+                // Confidence Badge
+                const conf = edit.confidence || 'Medium';
+                let confColor = 'bg-yellow-100 text-yellow-700';
+                if(conf === 'High') confColor = 'bg-green-100 text-green-700';
+                if(conf === 'Low') confColor = 'bg-red-100 text-red-700';
+
                 item.innerHTML = `
-                    <div class="text-xs font-bold text-slate-400 uppercase mb-1">${edit.reason}</div>
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-xs font-bold text-slate-400 uppercase">${edit.reason}</span>
+                        <span class="text-xs font-bold px-2 py-0.5 rounded ${confColor}">${conf} Confidence</span>
+                    </div>
                     <div class="mb-2">
                         <span class="line-through text-red-400 mr-2">${edit.original}</span>
                         <span class="text-green-600 font-bold text-lg">${edit.fix}</span>
@@ -404,8 +466,8 @@
             const edit = currentEdits.find(e => e.id === id);
             if(edit) {
                 edit.status = status;
-                const item = document.getElementById(`suggestion-${id}`);
-                item.className = `border rounded-lg p-4 bg-white transition cursor-pointer mb-4 ${getSuggestionClass(status)}`;
+                // Re-render to update class
+                renderReview();
             }
         }
 
@@ -443,6 +505,7 @@
             let verifyContent = null;
             let verifyMime = file.type;
             let verifyIsBinary = false;
+            let verifyRawData = null; // for visual diff
 
             const reader = new FileReader();
             
@@ -450,7 +513,8 @@
                 if (file.type.startsWith('image/') || file.type === 'application/pdf') {
                     verifyIsBinary = true;
                     reader.onload = (e) => {
-                        verifyContent = e.target.result.split(',')[1];
+                        verifyRawData = e.target.result;
+                        verifyContent = verifyRawData.split(',')[1];
                         resolve();
                     };
                     reader.readAsDataURL(file);
@@ -466,17 +530,15 @@
 
             await promise;
 
-            // 2. Filter only Accepted edits for verification
             const acceptedEdits = currentEdits.filter(e => e.status === 'accepted');
 
-            // 3. Call API for Verification
             try {
                 const response = await fetch('/.netlify/functions/proof-read', {
                     method: 'POST',
                     body: JSON.stringify({ 
                         mode: 'verify',
                         content: verifyContent,
-                        mediaType: currentMediaType, // Keep tone consistent
+                        mediaType: currentMediaType,
                         mimeType: verifyMime,
                         isBinary: verifyIsBinary,
                         expectedEdits: acceptedEdits
@@ -495,24 +557,33 @@
                 document.getElementById('verify-split-view').classList.remove('hidden');
                 document.getElementById('verify-split-view').classList.add('flex');
                 
-                // Show new doc preview
                 const wrapper = document.getElementById('verify-doc-wrapper');
+                const diffContainer = document.getElementById('diff-container-wrapper');
+                const diffMsg = document.getElementById('diff-toggle-msg');
+
                 wrapper.innerHTML = '';
+                diffContainer.classList.add('hidden');
+                wrapper.classList.remove('hidden');
+                diffMsg.classList.add('hidden');
+
                 if(verifyIsBinary) {
                     if (verifyMime.startsWith('image/')) {
-                        const img = document.createElement('img');
-                        img.src = `data:${verifyMime};base64,${verifyContent}`;
-                        img.className = "max-w-full h-auto border border-slate-300 shadow-sm";
-                        wrapper.appendChild(img);
+                        // VISUAL DIFF MODE for Images
+                        wrapper.classList.add('hidden');
+                        diffContainer.classList.remove('hidden');
+                        diffMsg.classList.remove('hidden');
+                        
+                        document.getElementById('diff-img-old').src = originalImageSrc;
+                        document.getElementById('diff-img-new').src = verifyRawData;
+
                     } else if (verifyMime === 'application/pdf') {
+                        // Just show PDF, diffing PDFs visually is hard in canvas
                         const iframe = document.createElement('iframe');
                         iframe.src = `data:${verifyMime};base64,${verifyContent}`;
                         iframe.className = "w-full h-[600px] border border-slate-300";
                         wrapper.appendChild(iframe);
                     }
                 } else {
-                    wrapper.innerText = isBinaryFile ? "(Binary file content hidden)" : atob(verifyContent); // decode if needed or just use raw text depending on flow
-                    // Actually for text mode verifyContent is raw text here, no base64 split for readAsText
                      if(!verifyIsBinary) wrapper.innerText = verifyContent;
                 }
 
@@ -525,6 +596,23 @@
             } finally {
                 document.getElementById('verify-loading').classList.add('hidden');
             }
+        }
+
+        // --- Visual Diff Logic ---
+        function moveDiff(e) {
+            const container = document.querySelector('.diff-container');
+            const rect = container.getBoundingClientRect();
+            let x = e.clientX || e.touches[0].clientX;
+            let posX = x - rect.left;
+            
+            // Constrain
+            if (posX < 0) posX = 0;
+            if (posX > rect.width) posX = rect.width;
+            
+            const percent = (posX / rect.width) * 100;
+            
+            document.getElementById('diff-resize').style.width = percent + '%';
+            document.getElementById('diff-handle').style.left = percent + '%';
         }
 
         function renderVerifyList(results) {
