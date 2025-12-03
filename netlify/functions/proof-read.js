@@ -1,53 +1,93 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 exports.handler = async (event, context) => {
+  // 1. CORS Headers (Optional but good for debugging)
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Content-Type": "application/json"
+  };
+
   if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
+    return { statusCode: 405, headers, body: "Method Not Allowed" };
   }
 
   try {
-    // We now expect 'mimeType' and 'isBinary' flags from the frontend
-    const { content, mediaType, mimeType, isBinary } = JSON.parse(event.body);
-
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    // 1. Define Tone Logic
-    let toneInstruction = "";
-    switch (mediaType) {
-      case "signage": toneInstruction = "Focus on brevity, high impact, and clarity."; break;
-      case "social": toneInstruction = "Focus on engagement, hashtags, and a casual/fun tone."; break;
-      case "policy": toneInstruction = "Focus on professional, formal, and legally precise language."; break;
-      default: toneInstruction = "Focus on readability and grammar.";
+    // 2. Check API Key immediately
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("CRITICAL: GEMINI_API_KEY is missing in Netlify Environment Variables.");
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({ error: "Configuration Error", details: "GEMINI_API_KEY is missing. Please add it to Netlify Site Settings." })
+      };
     }
 
-    // 2. Construct the Prompt Text
-    const systemPrompt = `
-      You are a professional content editor. 
-      Task: Proofread the provided content for a ${mediaType} context. ${toneInstruction}
-      
-      Return ONLY a raw JSON array of objects. Do not use Markdown code blocks.
-      Each object must have these exact keys:
-      - "id": A unique number
-      - "original": The exact substring from the text that needs changing (if reading an image/pdf, transcribe the text exactly as it appears)
-      - "fix": The suggested replacement
-      - "reason": A brief explanation (max 10 words)
-    `;
+    const payload = JSON.parse(event.body);
+    const { 
+      mode = "analyze", 
+      content, 
+      mediaType, 
+      mimeType, 
+      isBinary,
+      expectedEdits = [] 
+    } = payload;
 
-    // 3. Prepare the Payload for Gemini
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    let systemPrompt = "";
+    
+    // 3. Prompt Logic
+    if (mode === "verify") {
+      const editsList = expectedEdits.map(e => `- Change "${e.original}" to "${e.fix}"`).join("\n");
+      systemPrompt = `
+        You are a content verification engine.
+        Task: Review the provided document and verify if the following edits were implemented.
+        
+        Expected Edits:
+        ${editsList}
+
+        Return ONLY a raw JSON array of objects.
+        Each object must contain:
+        - "fix": The expected fix
+        - "status": "verified" or "failed"
+        - "comment": Brief explanation.
+      `;
+    } else {
+      let toneInstruction = "";
+      switch (mediaType) {
+        case "signage": toneInstruction = "Focus on brevity, high impact, and clarity."; break;
+        case "social": toneInstruction = "Focus on engagement, hashtags, and a casual/fun tone."; break;
+        case "policy": toneInstruction = "Focus on professional, formal, and legally precise language."; break;
+        default: toneInstruction = "Focus on readability and grammar.";
+      }
+
+      systemPrompt = `
+        You are a professional content editor. 
+        Task: Proofread the content for a ${mediaType} context. ${toneInstruction}
+        
+        Return ONLY a raw JSON array of objects.
+        Each object must have:
+        - "id": A unique number
+        - "original": The exact text to change
+        - "fix": The suggested replacement
+        - "reason": A brief explanation
+      `;
+    }
+
     let parts = [{ text: systemPrompt }];
 
     if (isBinary) {
-      // For PDF/Images, we pass the Base64 data directly
       parts.push({
         inlineData: {
           mimeType: mimeType,
-          data: content // This is the base64 string
+          data: content
         }
       });
     } else {
-      // For plain text files
-      parts.push({ text: `Text to review:\n"${content}"` });
+      parts.push({ text: `Document content:\n"${content}"` });
     }
 
     // 4. Call Gemini
@@ -55,20 +95,21 @@ exports.handler = async (event, context) => {
     const response = await result.response;
     let text = response.text();
 
-    // Clean up Markdown if present
+    // 5. Clean Response
     text = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: text,
     };
 
   } catch (error) {
-    console.error("Error details:", error);
+    console.error("Gemini API Error:", error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Processing failed", details: error.message }),
+      headers,
+      body: JSON.stringify({ error: "AI Processing Failed", details: error.message || error.toString() }),
     };
   }
 };
