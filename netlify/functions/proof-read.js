@@ -1,7 +1,6 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 exports.handler = async (event, context) => {
-  // 1. CORS Headers (Optional but good for debugging)
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
@@ -12,92 +11,53 @@ exports.handler = async (event, context) => {
     return { statusCode: 405, headers, body: "Method Not Allowed" };
   }
 
+  const apiKey = process.env.GEMINI_API_KEY;
+
   try {
-    // 2. Check API Key immediately
-    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("CRITICAL: GEMINI_API_KEY is missing in Netlify Environment Variables.");
-      return {
-        statusCode: 500,
-        headers,
-        body: JSON.stringify({ error: "Configuration Error", details: "GEMINI_API_KEY is missing. Please add it to Netlify Site Settings." })
-      };
+      throw new Error("GEMINI_API_KEY is missing in Netlify.");
     }
 
     const payload = JSON.parse(event.body);
-    const { 
-      mode = "analyze", 
-      content, 
-      mediaType, 
-      mimeType, 
-      isBinary,
-      expectedEdits = [] 
-    } = payload;
+    const { mode = "analyze", content, mediaType, mimeType, isBinary, expectedEdits = [] } = payload;
 
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // UPDATED: Using specific version "gemini-1.5-flash-001" to resolve 404 error
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-001" });
+    // START: Model Selection
+    // We will try the standard 1.5 Flash. 
+    // If this fails, the 'catch' block below will tell us what IS available.
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); 
+    // END: Model Selection
 
     let systemPrompt = "";
     
-    // 3. Prompt Logic
     if (mode === "verify") {
       const editsList = expectedEdits.map(e => `- Change "${e.original}" to "${e.fix}"`).join("\n");
       systemPrompt = `
         You are a content verification engine.
-        Task: Review the provided document and verify if the following edits were implemented.
-        
-        Expected Edits:
-        ${editsList}
-
-        Return ONLY a raw JSON array of objects.
-        Each object must contain:
-        - "fix": The expected fix
-        - "status": "verified" or "failed"
-        - "comment": Brief explanation.
+        Verify if the following edits were implemented.
+        Expected Edits: ${editsList}
+        Return ONLY a raw JSON array of objects with keys: "fix", "status" ('verified'/'failed'), "comment".
       `;
     } else {
-      let toneInstruction = "";
-      switch (mediaType) {
-        case "signage": toneInstruction = "Focus on brevity, high impact, and clarity."; break;
-        case "social": toneInstruction = "Focus on engagement, hashtags, and a casual/fun tone."; break;
-        case "policy": toneInstruction = "Focus on professional, formal, and legally precise language."; break;
-        default: toneInstruction = "Focus on readability and grammar.";
-      }
-
       systemPrompt = `
-        You are a professional content editor. 
-        Task: Proofread the content for a ${mediaType} context. ${toneInstruction}
-        
-        Return ONLY a raw JSON array of objects.
-        Each object must have:
-        - "id": A unique number
-        - "original": The exact text to change
-        - "fix": The suggested replacement
-        - "reason": A brief explanation
+        You are a professional content editor for ${mediaType}.
+        Return ONLY a raw JSON array of objects with keys: "id", "original", "fix", "reason".
       `;
     }
 
     let parts = [{ text: systemPrompt }];
 
     if (isBinary) {
-      parts.push({
-        inlineData: {
-          mimeType: mimeType,
-          data: content
-        }
-      });
+      parts.push({ inlineData: { mimeType: mimeType, data: content } });
     } else {
       parts.push({ text: `Document content:\n"${content}"` });
     }
 
-    // 4. Call Gemini
     const result = await model.generateContent(parts);
     const response = await result.response;
     let text = response.text();
 
-    // 5. Clean Response
     text = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
     return {
@@ -108,10 +68,31 @@ exports.handler = async (event, context) => {
 
   } catch (error) {
     console.error("Gemini API Error:", error);
+
+    // --- DIAGNOSTICS: FETCH AVAILABLE MODELS ---
+    let diagnosticMsg = "";
+    try {
+        // This manually asks Google "What models can I use?"
+        const listReq = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        const listData = await listReq.json();
+        if (listData.models) {
+            const modelNames = listData.models.map(m => m.name.replace('models/', '')).join(", ");
+            diagnosticMsg = ` | AVAILABLE MODELS DETECTED: [ ${modelNames} ]`;
+        } else {
+            diagnosticMsg = " | Could not list models. API Key might be invalid.";
+        }
+    } catch (diagError) {
+        diagnosticMsg = " | Diagnostics failed.";
+    }
+    // --------------------------------------------
+
     return {
       statusCode: 500,
       headers,
-      body: JSON.stringify({ error: "AI Processing Failed", details: error.message || error.toString() }),
+      body: JSON.stringify({ 
+        error: "AI Model Error", 
+        details: (error.message || "Unknown error") + diagnosticMsg 
+      }),
     };
   }
 };
