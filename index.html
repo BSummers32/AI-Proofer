@@ -12,12 +12,10 @@
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Highlight styles */
         .highlight { background-color: rgba(253, 224, 71, 0.5); border-bottom: 2px solid #eab308; cursor: pointer; transition: all 0.2s; }
         .highlight:hover { background-color: rgba(234, 179, 8, 0.6); }
         .highlight.active { background-color: rgba(234, 179, 8, 0.8); border-bottom: 3px solid #ca8a04; font-weight: bold; }
         
-        /* Status Colors for Review */
         .status-accepted { background-color: #dcfce7; border-color: #22c55e; } 
         .status-rejected { background-color: #fee2e2; border-color: #ef4444; } 
         
@@ -93,7 +91,7 @@
                 </button>
             </div>
             
-            <p id="error-msg" class="text-red-500 text-center mt-4 hidden"></p>
+            <p id="error-msg" class="text-red-600 bg-red-50 p-3 rounded border border-red-200 text-center mt-4 hidden font-medium"></p>
         </div>
 
         <!-- STAGE 2: REVIEW -->
@@ -104,9 +102,7 @@
                     <div class="bg-white min-h-[800px] p-12 rounded shadow-lg max-w-3xl mx-auto">
                         <h1 class="text-3xl font-bold mb-2" id="doc-title">Document Preview</h1>
                         <p class="text-xs text-slate-400 uppercase tracking-widest mb-8 border-b pb-4">Analyzed Content</p>
-                        <div id="doc-wrapper" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap">
-                            <!-- Content injected by JS -->
-                        </div>
+                        <div id="doc-wrapper" class="text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap"></div>
                     </div>
                 </div>
 
@@ -117,9 +113,7 @@
                             <span class="bg-red-100 text-red-600 p-1 rounded">!</span> AI Suggestions
                         </h3>
                     </div>
-                    <div class="flex-1 overflow-y-auto p-4 space-y-4" id="suggestions-list">
-                        <!-- Suggestions injected by JS -->
-                    </div>
+                    <div class="flex-1 overflow-y-auto p-4 space-y-4" id="suggestions-list"></div>
                     <div class="p-4 border-t bg-slate-50">
                         <button onclick="goToStage(3)" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700">
                             Save & Proceed
@@ -142,6 +136,14 @@
                     <p class="font-medium text-slate-700">Click to upload corrected file</p>
                     <input type="file" id="verify-input" class="hidden" onchange="startVerificationFlow(this)">
                 </div>
+                
+                <div id="verify-loading" class="hidden mt-6 flex justify-center items-center gap-3">
+                    <div class="animate-spin h-5 w-5 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+                    <span class="text-indigo-600 font-medium">AI is verifying changes...</span>
+                </div>
+                
+                <!-- Add Verify Error Message Area -->
+                <p id="verify-error-msg" class="text-red-600 bg-red-50 p-3 rounded border border-red-200 text-center mt-4 hidden font-medium"></p>
             </div>
 
             <div id="verify-split-view" class="hidden h-full gap-6">
@@ -219,7 +221,7 @@
         let currentStage = 1;
         let currentMediaType = null;
         let selectedFile = null;
-        let fileContent = null; // Base64 data or text
+        let fileContent = null; 
         let fileMimeType = null;
         let isBinaryFile = false;
         let currentEdits = [];
@@ -265,24 +267,21 @@
             if (!file) return;
             selectedFile = file;
             fileMimeType = file.type;
-
+            
             document.getElementById('upload-text').innerText = `Selected: ${file.name}`;
             document.getElementById('upload-text').classList.add('text-green-600', 'font-bold');
 
             const reader = new FileReader();
 
-            // Determine if binary (PDF/Image) or Text
             if (file.type.startsWith('image/') || file.type === 'application/pdf') {
                 isBinaryFile = true;
                 reader.onload = (e) => {
-                    // Extract base64 part only
                     const result = e.target.result;
                     fileContent = result.split(',')[1]; 
                     checkUploadReady();
                 };
                 reader.readAsDataURL(file);
             } else {
-                // Assume text
                 isBinaryFile = false;
                 reader.onload = (e) => {
                     fileContent = e.target.result;
@@ -310,6 +309,7 @@
                 const response = await fetch('/.netlify/functions/proof-read', {
                     method: 'POST',
                     body: JSON.stringify({ 
+                        mode: 'analyze',
                         content: fileContent,
                         mediaType: currentMediaType,
                         mimeType: fileMimeType,
@@ -317,7 +317,10 @@
                     })
                 });
 
-                if (!response.ok) throw new Error("API Connection Failed");
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.details || errorData.error || "Server Error");
+                }
 
                 const suggestions = await response.json();
                 currentEdits = suggestions.map(s => ({ ...s, status: 'pending' }));
@@ -325,7 +328,7 @@
                 goToStage(2);
             } catch (err) {
                 console.error(err);
-                document.getElementById('error-msg').innerText = "Error: Could not connect to AI. Check console.";
+                document.getElementById('error-msg').innerText = "Error: " + err.message;
                 document.getElementById('error-msg').classList.remove('hidden');
             } finally {
                 document.getElementById('loading-indicator').classList.add('hidden');
@@ -339,7 +342,6 @@
             const wrapper = document.getElementById('doc-wrapper');
             wrapper.innerHTML = '';
 
-            // If binary, show the image/pdf object
             if (isBinaryFile) {
                 if (fileMimeType.startsWith('image/')) {
                     const img = document.createElement('img');
@@ -353,9 +355,7 @@
                     wrapper.appendChild(iframe);
                 }
             } else {
-                // Text mode with highlighting
                 let htmlContent = fileContent;
-                // Escape HTML
                 htmlContent = htmlContent.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
                 
                 currentEdits.forEach(edit => {
@@ -365,7 +365,6 @@
                 wrapper.innerHTML = htmlContent;
             }
 
-            // Render Suggestions List
             const list = document.getElementById('suggestions-list');
             list.innerHTML = '';
             
@@ -373,7 +372,6 @@
                 const item = document.createElement('div');
                 item.id = `suggestion-${edit.id}`;
                 item.className = `border rounded-lg p-4 bg-white transition cursor-pointer mb-4 ${getSuggestionClass(edit.status)}`;
-                // Only highlight in text mode
                 if(!isBinaryFile) item.onclick = () => focusHighlight(edit.id);
                 
                 item.innerHTML = `
@@ -430,90 +428,159 @@
         function resetVerifyView() {
             document.getElementById('verify-upload-view').classList.remove('hidden');
             document.getElementById('verify-split-view').classList.add('hidden');
+            document.getElementById('verify-loading').classList.add('hidden');
+            document.getElementById('verify-error-msg').classList.add('hidden');
         }
 
-        function startVerificationFlow(input) {
-            if(input.files && input.files[0]) {
+        async function startVerificationFlow(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            document.getElementById('verify-loading').classList.remove('hidden');
+            document.getElementById('verify-error-msg').classList.add('hidden');
+
+            // 1. Prepare file data
+            let verifyContent = null;
+            let verifyMime = file.type;
+            let verifyIsBinary = false;
+
+            const reader = new FileReader();
+            
+            const promise = new Promise((resolve) => {
+                if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+                    verifyIsBinary = true;
+                    reader.onload = (e) => {
+                        verifyContent = e.target.result.split(',')[1];
+                        resolve();
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    verifyIsBinary = false;
+                    reader.onload = (e) => {
+                        verifyContent = e.target.result;
+                        resolve();
+                    };
+                    reader.readAsText(file);
+                }
+            });
+
+            await promise;
+
+            // 2. Filter only Accepted edits for verification
+            const acceptedEdits = currentEdits.filter(e => e.status === 'accepted');
+
+            // 3. Call API for Verification
+            try {
+                const response = await fetch('/.netlify/functions/proof-read', {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                        mode: 'verify',
+                        content: verifyContent,
+                        mediaType: currentMediaType, // Keep tone consistent
+                        mimeType: verifyMime,
+                        isBinary: verifyIsBinary,
+                        expectedEdits: acceptedEdits
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.details || errorData.error || "Verification Failed");
+                }
+                
+                const verificationResults = await response.json();
+
+                // 4. Render Results
                 document.getElementById('verify-upload-view').classList.add('hidden');
                 document.getElementById('verify-split-view').classList.remove('hidden');
                 document.getElementById('verify-split-view').classList.add('flex');
                 
-                // For simplicity in this demo, we assume the user uploaded the corrected text file
-                // If it's a binary file, we just show it. 
-                const file = input.files[0];
-                const reader = new FileReader();
-
-                reader.onload = (e) => {
-                    const wrapper = document.getElementById('verify-doc-wrapper');
-                    wrapper.innerHTML = '';
-                    
-                    if(file.type.startsWith('image/')) {
+                // Show new doc preview
+                const wrapper = document.getElementById('verify-doc-wrapper');
+                wrapper.innerHTML = '';
+                if(verifyIsBinary) {
+                    if (verifyMime.startsWith('image/')) {
                         const img = document.createElement('img');
-                        img.src = e.target.result;
+                        img.src = `data:${verifyMime};base64,${verifyContent}`;
                         img.className = "max-w-full h-auto border border-slate-300 shadow-sm";
                         wrapper.appendChild(img);
-                    } else if(file.type === 'application/pdf') {
+                    } else if (verifyMime === 'application/pdf') {
                         const iframe = document.createElement('iframe');
-                        iframe.src = e.target.result;
+                        iframe.src = `data:${verifyMime};base64,${verifyContent}`;
                         iframe.className = "w-full h-[600px] border border-slate-300";
                         wrapper.appendChild(iframe);
-                    } else {
-                         wrapper.innerText = e.target.result;
                     }
-                    
-                    renderVerifyList();
-                };
-                reader.readAsDataURL(file); // Read as Data URL for all types for ease of display
+                } else {
+                    wrapper.innerText = isBinaryFile ? "(Binary file content hidden)" : atob(verifyContent); // decode if needed or just use raw text depending on flow
+                    // Actually for text mode verifyContent is raw text here, no base64 split for readAsText
+                     if(!verifyIsBinary) wrapper.innerText = verifyContent;
+                }
+
+                renderVerifyList(verificationResults);
+
+            } catch (err) {
+                console.error(err);
+                document.getElementById('verify-error-msg').innerText = "Verification Error: " + err.message;
+                document.getElementById('verify-error-msg').classList.remove('hidden');
+            } finally {
+                document.getElementById('verify-loading').classList.add('hidden');
             }
         }
 
-        function renderVerifyList() {
+        function renderVerifyList(results) {
             const list = document.getElementById('verification-list');
             list.innerHTML = '';
             
-            setTimeout(() => {
-                currentEdits.forEach((edit, index) => {
-                    setTimeout(() => {
-                        const div = document.createElement('div');
-                        div.className = "border-b border-slate-100 pb-3 last:border-0";
-                        let icon = '', text = '', sub = '';
+            results.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = "border-b border-slate-100 pb-3 last:border-0";
+                
+                let icon = '', text = '', sub = '';
 
-                        if(edit.status === 'accepted') {
-                            icon = '<span class="text-green-500 font-bold">✓</span>';
-                            text = `Edit Found: "${edit.fix}"`;
-                            sub = 'Implementation verified.';
-                        } else if(edit.status === 'rejected') {
-                             icon = '<span class="text-slate-400 font-bold">-</span>';
-                             text = `Edit Skipped: "${edit.original}"`;
-                             sub = 'User declined this edit.';
-                        } else {
-                             icon = '<span class="text-amber-500 font-bold">?</span>';
-                             text = `Unresolved: "${edit.original}"`;
-                             sub = 'No action was taken.';
-                        }
+                if(item.status === 'verified') {
+                    icon = '<span class="text-green-500 font-bold">✓</span>';
+                    text = `Verified: "${item.fix}"`;
+                    sub = item.comment || "Change detected successfully.";
+                } else {
+                     icon = '<span class="text-red-500 font-bold">X</span>';
+                     text = `Not Found: "${item.fix}"`;
+                     sub = item.comment || "Could not verify this change.";
+                }
 
-                        div.innerHTML = `
-                            <div class="flex items-start gap-3 fade-in">
-                                <div class="mt-1">${icon}</div>
-                                <div>
-                                    <div class="font-medium text-sm text-slate-800">${text}</div>
-                                    <div class="text-xs text-slate-500">${sub}</div>
-                                </div>
-                            </div>
-                        `;
-                        list.appendChild(div);
-                        list.scrollTop = list.scrollHeight;
+                div.innerHTML = `
+                    <div class="flex items-start gap-3 fade-in">
+                        <div class="mt-1">${icon}</div>
+                        <div>
+                            <div class="font-medium text-sm text-slate-800">${text}</div>
+                            <div class="text-xs text-slate-500">${sub}</div>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
 
-                        if(index === currentEdits.length - 1) {
-                            const btn = document.getElementById('btn-proceed-approval');
-                            btn.disabled = false;
-                            btn.classList.remove('bg-slate-300', 'cursor-not-allowed');
-                            btn.classList.add('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-lg');
-                            btn.innerHTML = "Proceed to Approval";
-                        }
-                    }, index * 800);
-                });
-            }, 500);
+            // Also add skipped items
+            const skipped = currentEdits.filter(e => e.status !== 'accepted');
+            skipped.forEach(s => {
+                const div = document.createElement('div');
+                div.className = "border-b border-slate-100 pb-3 last:border-0 opacity-60";
+                div.innerHTML = `
+                    <div class="flex items-start gap-3 fade-in">
+                        <div class="mt-1 text-slate-400 font-bold">-</div>
+                        <div>
+                            <div class="font-medium text-sm text-slate-500">Skipped: "${s.original}"</div>
+                            <div class="text-xs text-slate-400">You ignored this edit.</div>
+                        </div>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+
+            const btn = document.getElementById('btn-proceed-approval');
+            btn.disabled = false;
+            btn.classList.remove('bg-slate-300', 'cursor-not-allowed');
+            btn.classList.add('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-lg');
+            btn.innerHTML = "Proceed to Approval";
         }
 
         // --- STAGE 4: CHECKLIST ---
