@@ -19,48 +19,29 @@ const storage = getStorage(app);
 const provider = new GoogleAuthProvider();
 
 let currentUser = null;
-let currentUserData = null; // Stores firestore user data
+let currentUserData = null; 
 let currentProject = null;
 let isRevisionMode = false;
-let originalImageSrc = null; // For diff
-let chatUnsubscribe = null; // Listener cleanup
+let originalImageSrc = null; 
+let chatUnsubscribe = null; 
 
-// --- EMAIL NOTIFICATION HELPER ---
-async function sendNotification(toEmail, subject, htmlContent) {
-    if (!toEmail) return; 
-    try {
-        const response = await fetch('/.netlify/functions/send-email', {
-            method: 'POST',
-            body: JSON.stringify({
-                to: toEmail,
-                subject: subject,
-                html: htmlContent
-            })
-        });
-        if (!response.ok) throw new Error("Email failed");
-        console.log("Notification sent to " + toEmail);
-    } catch (e) { console.error("Error sending notification:", e); }
-}
-
-// SIDEBAR TOGGLE
+// --- EXPORT FUNCTIONS TO WINDOW (Fixes button clicks) ---
 window.toggleSidebar = () => {
     const sb = document.getElementById('sidebar');
-    const icon = document.getElementById('toggle-icon');
     sb.classList.toggle('collapsed');
-    icon.innerHTML = sb.classList.contains('collapsed') ? '<polyline points="9 18 15 12 9 6"/>' : '<polyline points="15 18 9 12 15 6"/>';
 };
 
 window.signIn = () => signInWithPopup(auth, provider).catch(e => { document.getElementById('login-error').innerText = e.message; document.getElementById('login-error').classList.remove('hidden'); });
 window.logout = () => signOut(auth);
 
+// --- AUTH STATE ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        // Start listening to user profile changes
         onSnapshot(doc(db, "users", user.uid), (docSnap) => {
             if (docSnap.exists()) {
                 currentUserData = docSnap.data();
-                loadDashboard(); // Refresh dashboard to update badges
+                loadDashboard(); 
             }
         });
 
@@ -79,13 +60,12 @@ onAuthStateChanged(auth, async (user) => {
         loadDashboard();
     } else {
         currentUser = null;
-        currentUserData = null;
         document.getElementById('view-login').classList.remove('hidden');
         document.getElementById('view-app').classList.add('hidden');
     }
 });
 
-// DASHBOARD
+// --- NAVIGATION ---
 window.showDashboard = () => { hideAllViews(); document.getElementById('view-dashboard').classList.remove('hidden'); loadDashboard(); };
 window.showArchived = () => { hideAllViews(); document.getElementById('view-archived').classList.remove('hidden'); loadArchived(); };
 
@@ -95,6 +75,7 @@ async function loadDashboard() {
     const firstDay = new Date(today.setDate(today.getDate() - today.getDay() + 1));
     const lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 7));
     
+    // Team Projects Listener
     onSnapshot(query(collection(db, "projects")), (snapshot) => {
         const container = document.getElementById('list-team-projects');
         container.innerHTML = '';
@@ -117,10 +98,12 @@ async function loadDashboard() {
         document.getElementById('stat-total').innerText = activeCount;
         document.getElementById('stat-due').innerText = dueThisWeek;
         docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        
         if(docs.length === 0) container.innerHTML = '<div class="p-8 text-center text-slate-400">No active projects.</div>';
         docs.forEach(data => renderTeamRow(data, data.id, container));
     });
 
+    // Assigned Listener
     onSnapshot(query(collection(db, "projects"), where("reviewerId", "==", currentUser.uid)), (snapshot) => {
         const container = document.getElementById('list-assigned-docs');
         const badge = document.getElementById('badge-assigned');
@@ -130,6 +113,9 @@ async function loadDashboard() {
             const d = doc.data();
             if(d.status !== 'Archived' && d.status !== 'Approved') docs.push({ id: doc.id, ...d });
         });
+        
+        // Update notification count logic?
+        // For now just badge count
         if(docs.length === 0) {
             container.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm">All caught up!</div>';
             badge.innerText = "0";
@@ -140,30 +126,69 @@ async function loadDashboard() {
     });
 }
 
-async function loadArchived() {
-    onSnapshot(query(collection(db, "projects"), where("status", "==", "Archived")), (snapshot) => {
-        const container = document.getElementById('list-archived-docs');
-        container.innerHTML = '';
-        if(snapshot.empty) { container.innerHTML = '<div class="p-8 text-center text-slate-400">No archived projects.</div>'; return; }
-        snapshot.forEach(doc => renderTeamRow(doc.data(), doc.id, container, true));
-    });
-}
-
 function renderTeamRow(data, id, container, isArchived = false) {
     const div = document.createElement('div');
-    div.className = "grid grid-cols-12 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center transition group cursor-pointer";
-    let priorityBadge = data.priority === "Urgent" ? `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 uppercase tracking-wide">Urgent 🔥</span>` : data.priority === "High" ? `<span class="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold border border-orange-200 uppercase tracking-wide">High</span>` : `<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 uppercase tracking-wide">Normal</span>`;
+    // Updated Grid Columns to 12: Empty(1), Project(4), Status(2), Priority(2), Owner(1), Date(2)
+    div.className = "grid grid-cols-12 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center transition group cursor-pointer relative";
+    
+    // Status Logic
+    let statusDisplay = `<span class="text-slate-500 font-medium">Pending</span>`;
+    let statusColor = "bg-slate-100 text-slate-600";
+    
+    if (data.status === 'Needs Review') { statusColor = "bg-blue-100 text-blue-700"; }
+    else if (data.status === 'Changes Requested') { statusColor = "bg-red-100 text-red-700"; }
+    else if (data.status === 'Approved') { statusColor = "bg-emerald-100 text-emerald-700"; }
+    
+    // Revision Logic
+    let revisionText = data.revisionCount > 0 ? `${data.revisionCount} Revision` : "Original";
+    if(data.revisionCount === 1) revisionText = "1st Revision";
+    else if(data.revisionCount === 2) revisionText = "2nd Revision";
+    else if(data.revisionCount > 2) revisionText = `${data.revisionCount}th Revision`;
+
+    // Priority
+    let priorityBadge = data.priority === "Urgent" ? `<span class="text-red-600 font-bold text-xs uppercase">🔥 Urgent</span>` : 
+                        data.priority === "High" ? `<span class="text-orange-500 font-bold text-xs">High</span>` : 
+                        `<span class="text-slate-400 text-xs">Normal</span>`;
+
+    // Date
     const nextDate = data.deadlineNext ? new Date(data.deadlineNext).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
-    const finalDate = data.deadlineFinal ? new Date(data.deadlineFinal).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
+    
+    // Delete Button
     const canDelete = data.creatorId === currentUser.uid || data.reviewerId === currentUser.uid;
-    const deleteBtn = canDelete ? `<button onclick="deleteProject('${id}', '${data.storagePath || ''}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` : `<div class="w-8"></div>`;
+    const deleteBtn = canDelete ? 
+        `<button onclick="deleteProject('${id}', '${data.storagePath || ''}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition z-10 relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` 
+        : `<div class="w-8"></div>`;
+
+    // Chat Notification Logic
+    let showChatBadge = false;
+    if (currentUserData && data.lastChatAt) {
+        const lastView = currentUserData.projectViews && currentUserData.projectViews[id] ? currentUserData.projectViews[id].seconds : 0;
+        const lastChat = data.lastChatAt.seconds;
+        if (lastChat > lastView) showChatBadge = true;
+    }
+    const chatBadge = showChatBadge ? `<span class="absolute -top-1 -right-1 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>` : '';
+
+    div.onclick = () => window.loadProject(id);
 
     div.innerHTML = `
         <div class="col-span-1 text-center" onclick="event.stopPropagation()">${deleteBtn}</div>
-        <div class="col-span-4" onclick="loadProject('${id}')"><div class="font-bold text-slate-700 text-sm">${data.title}</div><div class="text-[10px] text-slate-400 mt-0.5 font-bold uppercase tracking-wide">${data.mediaType}</div></div>
-        <div class="col-span-2" onclick="loadProject('${id}')">${priorityBadge}</div>
-        <div class="col-span-2 flex items-center gap-2" onclick="loadProject('${id}')"><img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full border border-white shadow-sm"><span class="text-xs font-bold text-slate-600">${data.creatorName.split(' ')[0]}</span></div>
-        <div class="col-span-3 text-right text-xs" onclick="loadProject('${id}')">${data.deadlineNext ? `<div class="text-slate-600 font-medium">⏱️ Next: <span class="text-emerald-600">${nextDate}</span></div>` : ''}${data.deadlineFinal ? `<div class="text-slate-400 mt-0.5">🏁 Final: ${finalDate}</div>` : ''}</div>
+        <div class="col-span-4 relative">
+            <div class="flex items-center gap-2">
+                <div class="font-bold text-slate-700 text-sm truncate pr-2">${data.title}</div>
+                ${showChatBadge ? `<div class="bg-blue-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">New Msg</div>` : ''}
+            </div>
+            <div class="text-[10px] text-slate-400 mt-0.5 font-bold uppercase tracking-wide">${data.mediaType} • ${revisionText}</div>
+        </div>
+        <div class="col-span-2">
+            <span class="${statusColor} text-[10px] font-bold px-2 py-1 rounded uppercase border border-current opacity-80">${data.status}</span>
+        </div>
+        <div class="col-span-2">${priorityBadge}</div>
+        <div class="col-span-1 flex items-center gap-2">
+            <img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full border border-white shadow-sm" title="${data.creatorName}">
+        </div>
+        <div class="col-span-2 text-right text-xs text-slate-500 font-medium">
+            ${data.deadlineNext ? `Due: ${nextDate}` : ''}
+        </div>
     `;
     container.appendChild(div);
 }
@@ -171,13 +196,12 @@ function renderTeamRow(data, id, container, isArchived = false) {
 function renderCard(data, id, container) {
     const div = document.createElement('div');
     div.className = "bg-white/10 p-4 rounded-xl border border-white/5 hover:bg-white/15 transition cursor-pointer group relative";
-    div.onclick = () => loadProject(id);
+    div.onclick = () => window.loadProject(id);
+    
     let badge = data.priority === "Urgent" ? `<span class="bg-red-500/20 text-red-300 text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-red-500/30">Urgent 🔥</span>` : "";
     
-    // CHAT NOTIFICATION LOGIC
     let showChatBadge = false;
     if (currentUserData && data.lastChatAt) {
-        // If we have viewed this project before, check timestamps
         const lastView = currentUserData.projectViews && currentUserData.projectViews[id] ? currentUserData.projectViews[id].seconds : 0;
         const lastChat = data.lastChatAt.seconds;
         if (lastChat > lastView) showChatBadge = true;
@@ -185,19 +209,18 @@ function renderCard(data, id, container) {
 
     const chatIndicator = showChatBadge ? 
         `<div class="flex items-center gap-1 bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full chat-badge ml-2 shadow-lg z-10">
-            <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
             New Message
-            </div>` : '';
+         </div>` : '';
 
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
-            <div class="flex items-center">
+            <div class="flex items-center gap-2">
                 ${badge}
                 ${chatIndicator}
             </div>
             <span class="text-emerald-400 font-bold text-[10px] uppercase ml-auto">${data.status}</span>
         </div>
-        <h4 class="font-bold text-sm mb-3 text-white">${data.title}</h4>
+        <h4 class="font-bold text-sm mb-3 text-white truncate">${data.title}</h4>
         <div class="flex justify-between items-end">
             <div class="text-xs text-slate-400">From: <span class="text-white font-bold">${data.creatorName.split(' ')[0]}</span></div>
             <div class="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-500/50">${data.creatorName[0]}</div>
@@ -206,16 +229,16 @@ function renderCard(data, id, container) {
     container.appendChild(div);
 }
 
+// --- GLOBAL ACTIONS ---
 window.deleteProject = async (id, path) => {
     if(!confirm("⚠️ PERMANENT DELETE\nAre you sure you want to remove this project?")) return;
     try {
         await deleteDoc(doc(db, "projects", id));
         if(path) { try { await deleteObject(ref(storage, path)); } catch(e){} }
-        alert("Project deleted.");
+        // alert("Project deleted."); // Removed alert for smoother UX
     } catch(e) { alert("Error: " + e.message); }
 };
 
-// --- UPLOAD ---
 window.startUpload = (revisionMode = false) => {
     isRevisionMode = revisionMode;
     hideAllViews();
@@ -223,7 +246,7 @@ window.startUpload = (revisionMode = false) => {
     const t = document.getElementById('input-title');
     if(isRevisionMode && currentProject) {
         document.getElementById('wizard-title').innerText = "Upload Revision";
-        t.value = currentProject.title + " (v2)";
+        t.value = currentProject.title; 
         t.disabled = true;
         document.getElementById('type-group').classList.add('hidden');
         document.getElementById('context-group').classList.add('hidden');
@@ -238,10 +261,9 @@ window.startUpload = (revisionMode = false) => {
     }
     document.getElementById('file-upload').value = '';
     document.getElementById('file-preview-name').innerText = "Click to upload document";
+    fileToUpload = null;
+    fileBase64 = null;
 };
-
-let fileToUpload = null;
-let fileBase64 = null;
 
 window.handleFilePreview = (input) => {
     if(input.files[0]) {
@@ -287,6 +309,7 @@ window.submitProject = async () => {
         const res = await fetch('/.netlify/functions/proof-read', { method: 'POST', body: JSON.stringify(payload) });
         if(!res.ok) throw new Error("AI Analysis Failed");
         let suggestions = await res.json();
+        
         if(payload.mode === 'verify') {
             suggestions = suggestions.map((r, i) => ({
                 id: i, original: "Pending Fix", fix: r.fix, 
@@ -312,13 +335,22 @@ window.submitProject = async () => {
         };
 
         if(isRevisionMode) {
-            await updateDoc(doc(db, "projects", currentProject.id), { ...commonData, status: 'Needs Review', managerComments: '', isRevision: true });
-            loadProject(currentProject.id);
+            // Increment Revision Count
+            const newCount = (currentProject.revisionCount || 0) + 1;
+            await updateDoc(doc(db, "projects", currentProject.id), { 
+                ...commonData, 
+                status: 'Needs Review', 
+                managerComments: '', 
+                isRevision: true,
+                revisionCount: newCount 
+            });
+            window.loadProject(currentProject.id);
         } else {
             const docRef = await addDoc(collection(db, "projects"), {
                 title: title,
                 mediaType: type,
                 status: 'Draft',
+                revisionCount: 0,
                 creatorId: currentUser.uid,
                 creatorName: currentUser.displayName,
                 creatorEmail: currentUser.email,
@@ -327,7 +359,7 @@ window.submitProject = async () => {
                 reviewerId: null,
                 ...commonData
             });
-            loadProject(docRef.id);
+            window.loadProject(docRef.id);
         }
     } catch(e) {
         console.error(e);
@@ -337,13 +369,12 @@ window.submitProject = async () => {
     }
 };
 
-// --- PROJECT VIEW ---
 window.loadProject = async (id) => {
     hideAllViews();
     if(chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
     document.getElementById('view-project').classList.remove('hidden');
     
-    // Mark chat as Read for this user
+    // Mark as Read for Me
     if (currentUser) {
         setDoc(doc(db, "users", currentUser.uid), {
             projectViews: { [id]: serverTimestamp() }
@@ -354,7 +385,7 @@ window.loadProject = async (id) => {
         if(snap.exists()) {
             currentProject = { id: snap.id, ...snap.data() };
             renderProjectView();
-        } else { showDashboard(); }
+        } else { window.showDashboard(); }
     });
 
     const chatRef = query(collection(db, "projects", id, "messages"), orderBy("createdAt", "asc"));
@@ -371,11 +402,9 @@ window.loadProject = async (id) => {
         container.scrollTop = container.scrollHeight;
     });
     
-    // Default to AI tab
     window.switchTab('tab-ai');
 };
 
-// TAB SWITCHING
 window.switchTab = (tabId) => {
     ['tab-ai', 'tab-review', 'tab-chat'].forEach(t => document.getElementById(t).classList.add('hidden'));
     ['btn-tab-ai', 'btn-tab-review', 'btn-tab-chat'].forEach(b => b.classList.remove('active'));
@@ -391,7 +420,7 @@ function renderProjectView() {
     document.getElementById('project-priority-badge').innerText = p.priority || 'Normal';
     if(p.isRevision) document.getElementById('verification-badge').classList.remove('hidden');
     
-    // Doc View
+    // IMAGE & DIFF LOGIC
     const docContainer = document.getElementById('doc-view-container');
     const diffContainer = document.getElementById('diff-view-container');
     const diffMsg = document.getElementById('diff-toggle-msg');
@@ -407,6 +436,7 @@ function renderProjectView() {
         document.getElementById('diff-img-new').src = p.fileURL;
         if(originalImageSrc) document.getElementById('diff-img-old').src = originalImageSrc;
         else {
+            // Fallback
             docContainer.classList.remove('hidden');
             diffContainer.classList.add('hidden');
             docContainer.innerHTML = `<img src="${p.fileURL}" class="max-w-full h-auto mx-auto shadow-lg rounded">`;
@@ -428,7 +458,7 @@ function renderProjectView() {
     const isReviewer = p.reviewerId === currentUser.uid;
     const canEdit = (p.creatorId === currentUser.uid || isReviewer) && p.status !== 'Approved' && p.status !== 'Archived';
 
-    // 1. RENDER AI LIST
+    // 1. AI LIST
     const aiList = document.getElementById('ai-feedback-list');
     aiList.innerHTML = '';
     if(!p.aiSuggestions || p.aiSuggestions.length === 0) aiList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No AI suggestions found.</div>';
@@ -461,7 +491,7 @@ function renderProjectView() {
         `;
     });
 
-    // 2. RENDER MANUAL LIST
+    // 2. MANUAL LIST
     const manualList = document.getElementById('manual-feedback-list');
     manualList.innerHTML = '';
     if(!p.reviewerSuggestions || p.reviewerSuggestions.length === 0) manualList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No reviewer notes yet.</div>';
@@ -481,10 +511,7 @@ function renderProjectView() {
         `;
     });
 
-    // Toggle Input Forms
     document.getElementById('manual-note-form').classList.add('hidden');
-    
-    // Actions
     const actions = document.getElementById('action-buttons');
     actions.innerHTML = '';
     
@@ -493,9 +520,7 @@ function renderProjectView() {
         if(p.status === 'Changes Requested') actions.innerHTML = `<button onclick="startUpload(true)" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Upload Revision</button>`;
     } 
     if(isReviewer && p.status === 'Needs Review') {
-        // Reviewer Mode
         document.getElementById('manual-note-form').classList.remove('hidden');
-        
         actions.innerHTML = `
             <button onclick="submitReview('Changes Requested')" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition">Request Changes</button>
             <button onclick="openChecklist()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Approve Concept</button>
@@ -517,9 +542,7 @@ window.addManualSuggestion = async () => {
     const reason = document.getElementById('manual-reason').value;
     const original = document.getElementById('manual-original').value;
     const fix = document.getElementById('manual-fix').value;
-    
     if(!reason) return alert("Please enter a summary or reason.");
-
     try {
         const newNote = {
             reason, original, fix,
@@ -529,7 +552,6 @@ window.addManualSuggestion = async () => {
         await updateDoc(doc(db, "projects", currentProject.id), {
             reviewerSuggestions: arrayUnion(newNote)
         });
-        // Clear form
         document.getElementById('manual-reason').value = '';
         document.getElementById('manual-original').value = '';
         document.getElementById('manual-fix').value = '';
@@ -544,36 +566,28 @@ window.moveDiff = (e) => {
     document.getElementById('diff-handle').style.left = p + '%';
 };
 
-// --- CHAT FEATURE ---
 window.sendChatMessage = async (e) => {
     e.preventDefault();
     const input = document.getElementById('chat-input');
     const text = input.value.trim();
     if(!text || !currentProject) return;
     try {
-        // 1. Add Message
         await addDoc(collection(db, "projects", currentProject.id, "messages"), {
             text: text,
             senderId: currentUser.uid,
             senderName: currentUser.displayName,
             createdAt: serverTimestamp()
         });
-        
-        // 2. Update Project Timestamp (Triggers notification for others)
         await updateDoc(doc(db, "projects", currentProject.id), { 
             lastChatAt: serverTimestamp() 
         });
-
-        // 3. Mark as Read for Me (So I don't see notification)
         await setDoc(doc(db, "users", currentUser.uid), {
             projectViews: { [currentProject.id]: serverTimestamp() }
         }, { merge: true });
-
         input.value = '';
     } catch(err) { console.error("Chat error:", err); }
 };
 
-// --- ASSIGN ---
 window.openAssignModal = async () => {
     document.getElementById('modal-assign').classList.remove('hidden');
     const list = document.getElementById('user-list-container');
@@ -591,7 +605,7 @@ window.openAssignModal = async () => {
                 if (u.email) {
                     sendNotification(u.email, `New Assignment: ${currentProject.title}`, `<p>You have been assigned to review <b>${currentProject.title}</b>.</p><p>Please log in to Proof Buddy to view it.</p>`);
                 }
-                closeModal('modal-assign');
+                window.closeModal('modal-assign');
             }
         };
         div.innerHTML = `<img src="${u.photoURL}" class="w-12 h-12 rounded-full mb-2 shadow-sm"><span class="text-xs font-bold text-slate-700">${u.displayName.split(' ')[0]}</span>`;
@@ -599,21 +613,21 @@ window.openAssignModal = async () => {
     });
 };
 
-// --- APPROVALS ---
 window.openChecklist = () => { document.getElementById('modal-checklist').classList.remove('hidden'); document.getElementById('btn-confirm-approve').disabled = true; document.querySelectorAll('.approval-check').forEach(c => c.checked = false); };
 window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
 window.validateChecklist = () => { document.getElementById('btn-confirm-approve').disabled = !Array.from(document.querySelectorAll('.approval-check')).every(c => c.checked); };
 
 window.executeApproval = () => {
     submitReview('Approved');
-    closeModal('modal-checklist');
+    window.closeModal('modal-checklist');
 };
 
 window.submitReview = async (status) => {
-    // Manager comments now handled via notes, but we can pass a final generic message if needed.
+    // Notify creator when Reviewer requests changes OR approves
     await updateDoc(doc(db, "projects", currentProject.id), { status: status });
     if (currentProject.creatorEmail) {
-        sendNotification(currentProject.creatorEmail, `Project Update: ${status}`, `<p>Your project <b>${currentProject.title}</b> has been marked as: <b>${status}</b>.</p>`);
+        const subject = status === 'Approved' ? `Approved: ${currentProject.title}` : `Edits Requested: ${currentProject.title}`;
+        sendNotification(currentProject.creatorEmail, subject, `<p>Your project <b>${currentProject.title}</b> is now <b>${status}</b>.</p><p>Please check the Reviewer Notes tab in the app for details.</p>`);
     }
 };
 
@@ -623,7 +637,7 @@ window.finalizeProject = async () => {
         if(currentProject.storagePath) await deleteObject(ref(storage, currentProject.storagePath));
         await updateDoc(doc(db, "projects", currentProject.id), { status: 'Archived', fileURL: null, archivedAt: serverTimestamp() });
         alert("Project Archived.");
-        showDashboard();
+        window.showDashboard();
     } catch(e) { alert(e.message); }
 };
 
