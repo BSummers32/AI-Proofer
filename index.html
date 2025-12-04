@@ -374,6 +374,27 @@
         let isRevisionMode = false;
         let originalImageSrc = null; // For diff
 
+        // --- EMAIL NOTIFICATION HELPER ---
+        async function sendNotification(toEmail, subject, htmlContent) {
+            if (!toEmail) return; 
+            try {
+                // Calls the Netlify Function to send email securely
+                const response = await fetch('/.netlify/functions/send-email', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        to: toEmail,
+                        subject: subject,
+                        html: htmlContent
+                    })
+                });
+                
+                if (!response.ok) throw new Error("Email failed");
+                console.log("Notification sent to " + toEmail);
+            } catch (e) {
+                console.error("Error sending notification:", e);
+            }
+        }
+
         // SIDEBAR TOGGLE
         window.toggleSidebar = () => {
             const sb = document.getElementById('sidebar');
@@ -391,7 +412,7 @@
                 await setDoc(doc(db, "users", user.uid), {
                     uid: user.uid,
                     displayName: user.displayName,
-                    email: user.email,
+                    email: user.email, // Saves email for notifications
                     photoURL: user.photoURL,
                     lastSeen: serverTimestamp()
                 }, { merge: true });
@@ -670,6 +691,7 @@
                         status: 'Draft',
                         creatorId: currentUser.uid,
                         creatorName: currentUser.displayName,
+                        creatorEmail: currentUser.email, // Saves email for notifications
                         creatorPhoto: currentUser.photoURL,
                         createdAt: serverTimestamp(),
                         reviewerId: null,
@@ -838,6 +860,16 @@
                 div.onclick = async () => {
                     if(confirm(`Assign ${u.displayName}?`)) {
                         await updateDoc(doc(db, "projects", currentProject.id), { reviewerId: u.uid, reviewerName: u.displayName, status: 'Needs Review' });
+                        
+                        // NOTIFY REVIEWER
+                        if (u.email) {
+                            sendNotification(
+                                u.email, 
+                                `New Assignment: ${currentProject.title}`,
+                                `<p>You have been assigned to review <b>${currentProject.title}</b>.</p><p>Please log in to Proof Buddy to view it.</p>`
+                            );
+                        }
+
                         closeModal('modal-assign');
                     }
                 };
@@ -858,6 +890,15 @@
 
         window.submitReview = async (status) => {
             await updateDoc(doc(db, "projects", currentProject.id), { status: status, managerComments: document.getElementById('manager-input').value });
+
+            // NOTIFY CREATOR
+            if (currentProject.creatorEmail) {
+                sendNotification(
+                    currentProject.creatorEmail,
+                    `Project Update: ${status}`,
+                    `<p>Your project <b>${currentProject.title}</b> has been marked as: <b>${status}</b>.</p><p>Manager Comments: ${document.getElementById('manager-input').value}</p>`
+                );
+            }
         };
 
         window.finalizeProject = async () => {
