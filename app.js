@@ -18,23 +18,201 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 const provider = new GoogleAuthProvider();
 
+// State
 let currentUser = null;
 let currentUserData = null; 
 let currentProject = null;
 let isRevisionMode = false;
 let originalImageSrc = null; 
 let chatUnsubscribe = null; 
+let fileToUpload = null;
+let fileBase64 = null;
 
-// --- EXPORT FUNCTIONS TO WINDOW (Fixes button clicks) ---
+// --- GLOBAL BINDINGS (Fixes Button Clicks) ---
 window.toggleSidebar = () => {
-    const sb = document.getElementById('sidebar');
-    sb.classList.toggle('collapsed');
+    document.getElementById('sidebar').classList.toggle('collapsed');
 };
 
-window.signIn = () => signInWithPopup(auth, provider).catch(e => { document.getElementById('login-error').innerText = e.message; document.getElementById('login-error').classList.remove('hidden'); });
+window.signIn = () => signInWithPopup(auth, provider).catch(e => { 
+    document.getElementById('login-error').innerText = e.message; 
+    document.getElementById('login-error').classList.remove('hidden'); 
+});
+
 window.logout = () => signOut(auth);
 
-// --- AUTH STATE ---
+// --- NAVIGATION & TABS (Fixes Glitch #1) ---
+window.showDashboard = () => { hideAllViews(); document.getElementById('view-dashboard').classList.remove('hidden'); loadDashboard(); };
+window.showArchived = () => { hideAllViews(); document.getElementById('view-archived').classList.remove('hidden'); loadArchived(); };
+
+window.switchTab = (tabId) => {
+    // Hide all tabs
+    ['tab-ai', 'tab-review', 'tab-chat'].forEach(t => document.getElementById(t).classList.add('hidden'));
+    // Deactivate all buttons
+    ['btn-tab-ai', 'btn-tab-review', 'btn-tab-chat'].forEach(b => document.getElementById(b).classList.remove('active'));
+    
+    // Show selected
+    document.getElementById(tabId).classList.remove('hidden');
+    document.getElementById('btn-' + tabId).classList.add('active');
+};
+
+// --- FILE HANDLING (Fixes Glitch #2 & Adds MP4) ---
+window.handleFilePreview = (input) => {
+    if(input.files && input.files[0]) {
+        fileToUpload = input.files[0];
+        document.getElementById('file-preview-name').innerText = fileToUpload.name;
+        
+        // Show loading state if large file
+        if(fileToUpload.size > 5 * 1024 * 1024) {
+            document.getElementById('file-preview-name').innerText += " (Processing...)";
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            fileBase64 = e.target.result;
+            // Restore name after processing
+            document.getElementById('file-preview-name').innerText = fileToUpload.name; 
+        };
+        reader.readAsDataURL(fileToUpload);
+    }
+};
+
+window.startUpload = (revisionMode = false) => {
+    isRevisionMode = revisionMode;
+    hideAllViews();
+    document.getElementById('view-wizard').classList.remove('hidden');
+    
+    // Reset fields
+    fileToUpload = null;
+    fileBase64 = null;
+    document.getElementById('file-upload').value = '';
+    document.getElementById('file-preview-name').innerText = "Click to upload document or video";
+    
+    const t = document.getElementById('input-title');
+    if(isRevisionMode && currentProject) {
+        document.getElementById('wizard-title').innerText = "Upload Revision";
+        t.value = currentProject.title; 
+        t.disabled = true;
+        document.getElementById('type-group').classList.add('hidden');
+        document.getElementById('context-group').classList.add('hidden');
+        document.getElementById('btn-submit-project').innerText = "Verify Revision";
+    } else {
+        document.getElementById('wizard-title').innerText = "Upload New Content";
+        t.value = "";
+        t.disabled = false;
+        document.getElementById('type-group').classList.remove('hidden');
+        document.getElementById('context-group').classList.remove('hidden');
+        document.getElementById('btn-submit-project').innerText = "Analyze & Save Project";
+    }
+};
+
+window.submitProject = async () => {
+    const title = document.getElementById('input-title').value;
+    const btn = document.getElementById('btn-submit-project');
+    const statusMsg = document.getElementById('upload-status');
+
+    if(!fileToUpload) return alert("Please upload a file first.");
+    if(!fileBase64) return alert("File is still processing. Please wait a moment.");
+
+    btn.disabled = true;
+    statusMsg.classList.remove('hidden');
+
+    try {
+        // Strip data:image/png;base64, prefix for the API
+        const contentRaw = fileBase64.split(',')[1];
+        const mimeType = fileToUpload.type;
+        const isImage = mimeType.startsWith('image/');
+        const isPdf = mimeType === 'application/pdf';
+        const isVideo = mimeType.startsWith('video/');
+        const isBinary = isImage || isPdf || isVideo;
+
+        const payload = {
+            mode: 'analyze',
+            content: contentRaw,
+            mediaType: isRevisionMode ? currentProject.mediaType : document.getElementById('input-type').value,
+            mimeType: mimeType,
+            isBinary: isBinary,
+            targetAudience: document.getElementById('input-audience').value,
+            priority: document.getElementById('input-priority').value
+        };
+
+        if(isRevisionMode && currentProject.aiSuggestions) {
+            const accepted = currentProject.aiSuggestions.filter(s => s.status === 'accepted');
+            if(accepted.length > 0) {
+                payload.mode = 'verify';
+                payload.expectedEdits = accepted;
+            }
+        }
+
+        // Call Netlify Function
+        const res = await fetch('/.netlify/functions/proof-read', { 
+            method: 'POST', 
+            body: JSON.stringify(payload) 
+        });
+        
+        if(!res.ok) throw new Error("AI Analysis Failed. File might be too large for free tier.");
+        let suggestions = await res.json();
+        
+        // Format suggestions
+        if(payload.mode === 'verify') {
+            suggestions = suggestions.map((r, i) => ({
+                id: i, original: "Pending Fix", fix: r.fix, 
+                reason: r.status === 'verified' ? "✅ Verified Fix" : "❌ Fix Failed",
+                status: r.status === 'verified' ? 'accepted' : 'rejected'
+            }));
+        } else {
+            suggestions = suggestions.map(s => ({...s, status: 'pending'}));
+        }
+
+        // Upload to Firebase Storage
+        const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
+        await uploadString(storageRef, fileBase64, 'data_url');
+        const url = await getDownloadURL(storageRef);
+
+        const commonData = {
+            fileURL: url,
+            storagePath: storageRef.fullPath,
+            fileMime: mimeType,
+            aiSuggestions: suggestions,
+            priority: document.getElementById('input-priority').value,
+            deadlineFinal: document.getElementById('input-deadline-final').value,
+            deadlineNext: document.getElementById('input-deadline-next').value
+        };
+
+        if(isRevisionMode) {
+            const newCount = (currentProject.revisionCount || 0) + 1;
+            await updateDoc(doc(db, "projects", currentProject.id), { 
+                ...commonData, 
+                status: 'Needs Review', 
+                managerComments: '', 
+                isRevision: true,
+                revisionCount: newCount 
+            });
+            window.loadProject(currentProject.id);
+        } else {
+            const docRef = await addDoc(collection(db, "projects"), {
+                title: title,
+                mediaType: payload.mediaType,
+                status: 'Draft',
+                revisionCount: 0,
+                creatorId: currentUser.uid,
+                creatorName: currentUser.displayName,
+                creatorEmail: currentUser.email,
+                creatorPhoto: currentUser.photoURL,
+                createdAt: serverTimestamp(),
+                reviewerId: null,
+                ...commonData
+            });
+            window.loadProject(docRef.id);
+        }
+    } catch(e) {
+        console.error(e);
+        alert("Upload Error: " + e.message);
+        btn.disabled = false;
+        statusMsg.classList.add('hidden');
+    }
+};
+
+// --- AUTH LISTENER ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
@@ -44,7 +222,6 @@ onAuthStateChanged(auth, async (user) => {
                 loadDashboard(); 
             }
         });
-
         await setDoc(doc(db, "users", user.uid), {
             uid: user.uid,
             displayName: user.displayName,
@@ -65,17 +242,12 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// --- NAVIGATION ---
-window.showDashboard = () => { hideAllViews(); document.getElementById('view-dashboard').classList.remove('hidden'); loadDashboard(); };
-window.showArchived = () => { hideAllViews(); document.getElementById('view-archived').classList.remove('hidden'); loadArchived(); };
-
 async function loadDashboard() {
     if(!currentUser) return;
     const today = new Date();
     const firstDay = new Date(today.setDate(today.getDate() - today.getDay() + 1));
     const lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 7));
     
-    // Team Projects Listener
     onSnapshot(query(collection(db, "projects")), (snapshot) => {
         const container = document.getElementById('list-team-projects');
         container.innerHTML = '';
@@ -103,7 +275,6 @@ async function loadDashboard() {
         docs.forEach(data => renderTeamRow(data, data.id, container));
     });
 
-    // Assigned Listener
     onSnapshot(query(collection(db, "projects"), where("reviewerId", "==", currentUser.uid)), (snapshot) => {
         const container = document.getElementById('list-assigned-docs');
         const badge = document.getElementById('badge-assigned');
@@ -114,8 +285,6 @@ async function loadDashboard() {
             if(d.status !== 'Archived' && d.status !== 'Approved') docs.push({ id: doc.id, ...d });
         });
         
-        // Update notification count logic?
-        // For now just badge count
         if(docs.length === 0) {
             container.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm">All caught up!</div>';
             badge.innerText = "0";
@@ -128,45 +297,34 @@ async function loadDashboard() {
 
 function renderTeamRow(data, id, container, isArchived = false) {
     const div = document.createElement('div');
-    // Updated Grid Columns to 12: Empty(1), Project(4), Status(2), Priority(2), Owner(1), Date(2)
     div.className = "grid grid-cols-12 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center transition group cursor-pointer relative";
     
-    // Status Logic
-    let statusDisplay = `<span class="text-slate-500 font-medium">Pending</span>`;
     let statusColor = "bg-slate-100 text-slate-600";
+    if (data.status === 'Needs Review') statusColor = "bg-blue-100 text-blue-700";
+    if (data.status === 'Changes Requested') statusColor = "bg-red-100 text-red-700";
+    if (data.status === 'Approved') statusColor = "bg-emerald-100 text-emerald-700";
     
-    if (data.status === 'Needs Review') { statusColor = "bg-blue-100 text-blue-700"; }
-    else if (data.status === 'Changes Requested') { statusColor = "bg-red-100 text-red-700"; }
-    else if (data.status === 'Approved') { statusColor = "bg-emerald-100 text-emerald-700"; }
-    
-    // Revision Logic
     let revisionText = data.revisionCount > 0 ? `${data.revisionCount} Revision` : "Original";
     if(data.revisionCount === 1) revisionText = "1st Revision";
     else if(data.revisionCount === 2) revisionText = "2nd Revision";
-    else if(data.revisionCount > 2) revisionText = `${data.revisionCount}th Revision`;
 
-    // Priority
     let priorityBadge = data.priority === "Urgent" ? `<span class="text-red-600 font-bold text-xs uppercase">🔥 Urgent</span>` : 
                         data.priority === "High" ? `<span class="text-orange-500 font-bold text-xs">High</span>` : 
                         `<span class="text-slate-400 text-xs">Normal</span>`;
 
-    // Date
     const nextDate = data.deadlineNext ? new Date(data.deadlineNext).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
     
-    // Delete Button
     const canDelete = data.creatorId === currentUser.uid || data.reviewerId === currentUser.uid;
     const deleteBtn = canDelete ? 
-        `<button onclick="deleteProject('${id}', '${data.storagePath || ''}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition z-10 relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` 
-        : `<div class="w-8"></div>`;
+        `<button onclick="deleteProject('${id}', '${data.storagePath || ''}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition z-10 relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` : `<div class="w-8"></div>`;
 
-    // Chat Notification Logic
+    // Chat Notification
     let showChatBadge = false;
     if (currentUserData && data.lastChatAt) {
         const lastView = currentUserData.projectViews && currentUserData.projectViews[id] ? currentUserData.projectViews[id].seconds : 0;
         const lastChat = data.lastChatAt.seconds;
         if (lastChat > lastView) showChatBadge = true;
     }
-    const chatBadge = showChatBadge ? `<span class="absolute -top-1 -right-1 flex h-3 w-3"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span></span>` : '';
 
     div.onclick = () => window.loadProject(id);
 
@@ -208,9 +366,7 @@ function renderCard(data, id, container) {
     }
 
     const chatIndicator = showChatBadge ? 
-        `<div class="flex items-center gap-1 bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full chat-badge ml-2 shadow-lg z-10">
-            New Message
-         </div>` : '';
+        `<div class="flex items-center gap-1 bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full chat-badge ml-2 shadow-lg z-10">New Message</div>` : '';
 
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
@@ -229,152 +385,12 @@ function renderCard(data, id, container) {
     container.appendChild(div);
 }
 
-// --- GLOBAL ACTIONS ---
-window.deleteProject = async (id, path) => {
-    if(!confirm("⚠️ PERMANENT DELETE\nAre you sure you want to remove this project?")) return;
-    try {
-        await deleteDoc(doc(db, "projects", id));
-        if(path) { try { await deleteObject(ref(storage, path)); } catch(e){} }
-        // alert("Project deleted."); // Removed alert for smoother UX
-    } catch(e) { alert("Error: " + e.message); }
-};
-
-window.startUpload = (revisionMode = false) => {
-    isRevisionMode = revisionMode;
-    hideAllViews();
-    document.getElementById('view-wizard').classList.remove('hidden');
-    const t = document.getElementById('input-title');
-    if(isRevisionMode && currentProject) {
-        document.getElementById('wizard-title').innerText = "Upload Revision";
-        t.value = currentProject.title; 
-        t.disabled = true;
-        document.getElementById('type-group').classList.add('hidden');
-        document.getElementById('context-group').classList.add('hidden');
-        document.getElementById('btn-submit-project').innerText = "Verify Revision";
-    } else {
-        document.getElementById('wizard-title').innerText = "Upload New Content";
-        t.value = "";
-        t.disabled = false;
-        document.getElementById('type-group').classList.remove('hidden');
-        document.getElementById('context-group').classList.remove('hidden');
-        document.getElementById('btn-submit-project').innerText = "Analyze & Save Project";
-    }
-    document.getElementById('file-upload').value = '';
-    document.getElementById('file-preview-name').innerText = "Click to upload document";
-    fileToUpload = null;
-    fileBase64 = null;
-};
-
-window.handleFilePreview = (input) => {
-    if(input.files[0]) {
-        fileToUpload = input.files[0];
-        document.getElementById('file-preview-name').innerText = fileToUpload.name;
-        const reader = new FileReader();
-        reader.onload = (e) => fileBase64 = e.target.result;
-        reader.readAsDataURL(fileToUpload);
-    }
-};
-
-window.submitProject = async () => {
-    const title = document.getElementById('input-title').value;
-    const btn = document.getElementById('btn-submit-project');
-    const statusMsg = document.getElementById('upload-status');
-    if(!fileToUpload) return alert("Please upload a file");
-
-    btn.disabled = true;
-    statusMsg.classList.remove('hidden');
-    try {
-        const contentRaw = fileBase64.split(',')[1];
-        const isBinary = fileToUpload.type.startsWith('image/') || fileToUpload.type === 'application/pdf';
-        const type = document.getElementById('input-type').value;
-        
-        const payload = {
-            mode: 'analyze',
-            content: contentRaw,
-            mediaType: isRevisionMode ? currentProject.mediaType : type,
-            mimeType: fileToUpload.type,
-            isBinary: isBinary,
-            targetAudience: document.getElementById('input-audience').value,
-            priority: document.getElementById('input-priority').value
-        };
-
-        if(isRevisionMode && currentProject.aiSuggestions) {
-            const accepted = currentProject.aiSuggestions.filter(s => s.status === 'accepted');
-            if(accepted.length > 0) {
-                payload.mode = 'verify';
-                payload.expectedEdits = accepted;
-            }
-        }
-
-        const res = await fetch('/.netlify/functions/proof-read', { method: 'POST', body: JSON.stringify(payload) });
-        if(!res.ok) throw new Error("AI Analysis Failed");
-        let suggestions = await res.json();
-        
-        if(payload.mode === 'verify') {
-            suggestions = suggestions.map((r, i) => ({
-                id: i, original: "Pending Fix", fix: r.fix, 
-                reason: r.status === 'verified' ? "✅ Verified Fix" : "❌ Fix Failed",
-                status: r.status === 'verified' ? 'accepted' : 'rejected'
-            }));
-        } else {
-            suggestions = suggestions.map(s => ({...s, status: 'pending'}));
-        }
-
-        const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
-        await uploadString(storageRef, fileBase64, 'data_url');
-        const url = await getDownloadURL(storageRef);
-
-        const commonData = {
-            fileURL: url,
-            storagePath: storageRef.fullPath,
-            fileMime: fileToUpload.type,
-            aiSuggestions: suggestions,
-            priority: document.getElementById('input-priority').value,
-            deadlineFinal: document.getElementById('input-deadline-final').value,
-            deadlineNext: document.getElementById('input-deadline-next').value
-        };
-
-        if(isRevisionMode) {
-            // Increment Revision Count
-            const newCount = (currentProject.revisionCount || 0) + 1;
-            await updateDoc(doc(db, "projects", currentProject.id), { 
-                ...commonData, 
-                status: 'Needs Review', 
-                managerComments: '', 
-                isRevision: true,
-                revisionCount: newCount 
-            });
-            window.loadProject(currentProject.id);
-        } else {
-            const docRef = await addDoc(collection(db, "projects"), {
-                title: title,
-                mediaType: type,
-                status: 'Draft',
-                revisionCount: 0,
-                creatorId: currentUser.uid,
-                creatorName: currentUser.displayName,
-                creatorEmail: currentUser.email,
-                creatorPhoto: currentUser.photoURL,
-                createdAt: serverTimestamp(),
-                reviewerId: null,
-                ...commonData
-            });
-            window.loadProject(docRef.id);
-        }
-    } catch(e) {
-        console.error(e);
-        alert(e.message);
-        btn.disabled = false;
-        statusMsg.classList.add('hidden');
-    }
-};
-
+// --- PROJECT VIEW (Updated for MP4) ---
 window.loadProject = async (id) => {
     hideAllViews();
     if(chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
     document.getElementById('view-project').classList.remove('hidden');
     
-    // Mark as Read for Me
     if (currentUser) {
         setDoc(doc(db, "users", currentUser.uid), {
             projectViews: { [id]: serverTimestamp() }
@@ -405,14 +421,6 @@ window.loadProject = async (id) => {
     window.switchTab('tab-ai');
 };
 
-window.switchTab = (tabId) => {
-    ['tab-ai', 'tab-review', 'tab-chat'].forEach(t => document.getElementById(t).classList.add('hidden'));
-    ['btn-tab-ai', 'btn-tab-review', 'btn-tab-chat'].forEach(b => b.classList.remove('active'));
-    
-    document.getElementById(tabId).classList.remove('hidden');
-    document.getElementById('btn-' + tabId).classList.add('active');
-};
-
 function renderProjectView() {
     const p = currentProject;
     document.getElementById('project-title-display').innerText = p.title;
@@ -420,53 +428,46 @@ function renderProjectView() {
     document.getElementById('project-priority-badge').innerText = p.priority || 'Normal';
     if(p.isRevision) document.getElementById('verification-badge').classList.remove('hidden');
     
-    // IMAGE & DIFF LOGIC
     const docContainer = document.getElementById('doc-view-container');
     const diffContainer = document.getElementById('diff-view-container');
     const diffMsg = document.getElementById('diff-toggle-msg');
     docContainer.innerHTML = '';
     
+    // MP4 & Image Logic
     if(p.status === 'Archived') {
         docContainer.innerHTML = '<div class="p-12 text-center text-slate-400 italic">Project Archived.</div>';
         diffContainer.classList.add('hidden');
-    } else if(p.isRevision && p.fileMime.startsWith('image/') && originalImageSrc) {
-        docContainer.classList.add('hidden');
-        diffContainer.classList.remove('hidden');
-        diffMsg.classList.remove('hidden');
-        document.getElementById('diff-img-new').src = p.fileURL;
-        if(originalImageSrc) document.getElementById('diff-img-old').src = originalImageSrc;
-        else {
-            // Fallback
-            docContainer.classList.remove('hidden');
-            diffContainer.classList.add('hidden');
-            docContainer.innerHTML = `<img src="${p.fileURL}" class="max-w-full h-auto mx-auto shadow-lg rounded">`;
-        }
     } else {
+        // Reset Diff Mode
         docContainer.classList.remove('hidden');
         diffContainer.classList.add('hidden');
         diffMsg.classList.add('hidden');
+
         if(p.fileMime.startsWith('image/')) {
             docContainer.innerHTML = `<img src="${p.fileURL}" class="max-w-full h-auto mx-auto shadow-lg rounded">`;
             originalImageSrc = p.fileURL; 
         } else if(p.fileMime === 'application/pdf') {
             docContainer.innerHTML = `<iframe src="${p.fileURL}" class="w-full h-full border-0 rounded"></iframe>`;
+        } else if(p.fileMime.startsWith('video/')) {
+            // New Video Player
+            docContainer.innerHTML = `
+                <div class="bg-black rounded-xl overflow-hidden shadow-lg w-full flex justify-center">
+                    <video controls src="${p.fileURL}" class="max-h-[600px] max-w-full"></video>
+                </div>`;
         } else {
-            docContainer.innerHTML = `<div class="p-8">File available for download.</div>`;
+            docContainer.innerHTML = `<div class="p-8 text-center"><a href="${p.fileURL}" target="_blank" class="text-blue-500 underline">Download File</a></div>`;
         }
     }
 
     const isReviewer = p.reviewerId === currentUser.uid;
     const canEdit = (p.creatorId === currentUser.uid || isReviewer) && p.status !== 'Approved' && p.status !== 'Archived';
 
-    // 1. AI LIST
+    // Render Lists (AI, Manual) - SAME AS BEFORE
     const aiList = document.getElementById('ai-feedback-list');
     aiList.innerHTML = '';
     if(!p.aiSuggestions || p.aiSuggestions.length === 0) aiList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No AI suggestions found.</div>';
     (p.aiSuggestions || []).forEach((s, idx) => {
-        let statusClass = 'status-pending';
-        if(s.status === 'accepted') statusClass = 'status-accepted';
-        if(s.status === 'rejected') statusClass = 'status-rejected';
-
+        let statusClass = s.status === 'accepted' ? 'status-accepted' : s.status === 'rejected' ? 'status-rejected' : 'status-pending';
         let btns = '';
         if(canEdit) {
             btns = `<div class="flex gap-2 mt-3 pt-3 border-t border-slate-100">
@@ -474,41 +475,23 @@ function renderProjectView() {
                 <button onclick="updateSuggestion(${idx}, 'rejected')" class="flex-1 text-red-500 hover:bg-red-50 py-1.5 rounded text-xs font-bold transition">Reject ❌</button>
             </div>`;
         }
-
         aiList.innerHTML += `
             <div class="suggestion-card p-5 mb-4 ${statusClass}">
-                <div class="flex justify-between items-start mb-2">
-                    <span class="text-sm font-bold text-slate-800 leading-tight">${s.reason}</span>
-                    ${s.status !== 'pending' ? `<span class="text-[10px] font-bold uppercase ml-2 ${s.status === 'accepted' ? 'text-emerald-600' : 'text-red-500'}">${s.status}</span>` : ''}
-                </div>
-                <div class="diff-block">
-                    <div class="diff-old">${s.original}</div>
-                    <div class="text-center text-slate-300 text-xs">↓</div>
-                    <div class="diff-new">${s.fix}</div>
-                </div>
+                <div class="flex justify-between items-start mb-2"><span class="text-sm font-bold text-slate-800 leading-tight">${s.reason}</span>${s.status !== 'pending' ? `<span class="text-[10px] font-bold uppercase ml-2 ${s.status === 'accepted' ? 'text-emerald-600' : 'text-red-500'}">${s.status}</span>` : ''}</div>
+                <div class="diff-block"><div class="diff-old">${s.original}</div><div class="text-center text-slate-300 text-xs">↓</div><div class="diff-new">${s.fix}</div></div>
                 ${btns}
-            </div>
-        `;
+            </div>`;
     });
 
-    // 2. MANUAL LIST
     const manualList = document.getElementById('manual-feedback-list');
     manualList.innerHTML = '';
     if(!p.reviewerSuggestions || p.reviewerSuggestions.length === 0) manualList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No reviewer notes yet.</div>';
-    
     (p.reviewerSuggestions || []).forEach((s) => {
         manualList.innerHTML += `
             <div class="suggestion-card p-5 mb-4 status-manual">
-                <div class="flex justify-between items-start mb-2">
-                    <span class="text-sm font-bold text-slate-800 leading-tight">${s.reason}</span>
-                    <span class="text-[10px] font-bold text-blue-500 uppercase ml-2">Note</span>
-                </div>
-                <div class="diff-block">
-                    ${s.original ? `<div class="diff-old">${s.original}</div>` : ''}
-                    ${s.fix ? `<div class="diff-new">${s.fix}</div>` : ''}
-                </div>
-            </div>
-        `;
+                <div class="flex justify-between items-start mb-2"><span class="text-sm font-bold text-slate-800 leading-tight">${s.reason}</span><span class="text-[10px] font-bold text-blue-500 uppercase ml-2">Note</span></div>
+                <div class="diff-block">${s.original ? `<div class="diff-old">${s.original}</div>` : ''}${s.fix ? `<div class="diff-new">${s.fix}</div>` : ''}</div>
+            </div>`;
     });
 
     document.getElementById('manual-note-form').classList.add('hidden');
@@ -531,7 +514,7 @@ function renderProjectView() {
     }
 }
 
-// --- INTERACTIONS ---
+// --- INTERACTIONS (Global) ---
 window.updateSuggestion = async (i, s) => {
     const newS = [...currentProject.aiSuggestions];
     newS[i].status = s;
@@ -544,26 +527,12 @@ window.addManualSuggestion = async () => {
     const fix = document.getElementById('manual-fix').value;
     if(!reason) return alert("Please enter a summary or reason.");
     try {
-        const newNote = {
-            reason, original, fix,
-            createdAt: Date.now(),
-            creatorId: currentUser.uid
-        };
-        await updateDoc(doc(db, "projects", currentProject.id), {
-            reviewerSuggestions: arrayUnion(newNote)
-        });
+        const newNote = { reason, original, fix, createdAt: Date.now(), creatorId: currentUser.uid };
+        await updateDoc(doc(db, "projects", currentProject.id), { reviewerSuggestions: arrayUnion(newNote) });
         document.getElementById('manual-reason').value = '';
         document.getElementById('manual-original').value = '';
         document.getElementById('manual-fix').value = '';
     } catch(e) { console.error(e); }
-};
-
-window.moveDiff = (e) => {
-    const rect = document.querySelector('.diff-container').getBoundingClientRect();
-    const x = (e.clientX || e.touches[0].clientX) - rect.left;
-    const p = Math.max(0, Math.min(100, (x / rect.width) * 100));
-    document.getElementById('diff-resize').style.width = p + '%';
-    document.getElementById('diff-handle').style.left = p + '%';
 };
 
 window.sendChatMessage = async (e) => {
@@ -578,9 +547,8 @@ window.sendChatMessage = async (e) => {
             senderName: currentUser.displayName,
             createdAt: serverTimestamp()
         });
-        await updateDoc(doc(db, "projects", currentProject.id), { 
-            lastChatAt: serverTimestamp() 
-        });
+        await updateDoc(doc(db, "projects", currentProject.id), { lastChatAt: serverTimestamp() });
+        // Mark as read for self
         await setDoc(doc(db, "users", currentUser.uid), {
             projectViews: { [currentProject.id]: serverTimestamp() }
         }, { merge: true });
@@ -602,9 +570,7 @@ window.openAssignModal = async () => {
         div.onclick = async () => {
             if(confirm(`Assign ${u.displayName}?`)) {
                 await updateDoc(doc(db, "projects", currentProject.id), { reviewerId: u.uid, reviewerName: u.displayName, status: 'Needs Review' });
-                if (u.email) {
-                    sendNotification(u.email, `New Assignment: ${currentProject.title}`, `<p>You have been assigned to review <b>${currentProject.title}</b>.</p><p>Please log in to Proof Buddy to view it.</p>`);
-                }
+                if (u.email) sendNotification(u.email, `New Assignment: ${currentProject.title}`, `<p>You have been assigned to review <b>${currentProject.title}</b>.</p><p>Please log in to Proof Buddy to view it.</p>`);
                 window.closeModal('modal-assign');
             }
         };
@@ -616,14 +582,9 @@ window.openAssignModal = async () => {
 window.openChecklist = () => { document.getElementById('modal-checklist').classList.remove('hidden'); document.getElementById('btn-confirm-approve').disabled = true; document.querySelectorAll('.approval-check').forEach(c => c.checked = false); };
 window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
 window.validateChecklist = () => { document.getElementById('btn-confirm-approve').disabled = !Array.from(document.querySelectorAll('.approval-check')).every(c => c.checked); };
-
-window.executeApproval = () => {
-    submitReview('Approved');
-    window.closeModal('modal-checklist');
-};
+window.executeApproval = () => { window.submitReview('Approved'); window.closeModal('modal-checklist'); };
 
 window.submitReview = async (status) => {
-    // Notify creator when Reviewer requests changes OR approves
     await updateDoc(doc(db, "projects", currentProject.id), { status: status });
     if (currentProject.creatorEmail) {
         const subject = status === 'Approved' ? `Approved: ${currentProject.title}` : `Edits Requested: ${currentProject.title}`;
@@ -639,6 +600,14 @@ window.finalizeProject = async () => {
         alert("Project Archived.");
         window.showDashboard();
     } catch(e) { alert(e.message); }
+};
+
+window.deleteProject = async (id, path) => {
+    if(!confirm("⚠️ PERMANENT DELETE\nAre you sure you want to remove this project?")) return;
+    try {
+        await deleteDoc(doc(db, "projects", id));
+        if(path) { try { await deleteObject(ref(storage, path)); } catch(e){} }
+    } catch(e) { alert("Error: " + e.message); }
 };
 
 function hideAllViews() {

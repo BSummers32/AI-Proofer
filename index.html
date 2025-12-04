@@ -215,9 +215,10 @@
                             <div class="bg-emerald-100 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                             </div>
-                            <div id="file-preview-name" class="text-slate-600 font-medium">Click to upload document</div>
-                            <p class="text-xs text-slate-400 mt-1">PDF, JPG, PNG supported</p>
-                            <input type="file" id="file-upload" class="hidden" onchange="handleFilePreview(this)">
+                            <div id="file-preview-name" class="text-slate-600 font-medium">Click to upload document or video</div>
+                            <p class="text-xs text-slate-400 mt-1">PDF, JPG, PNG, MP4 supported</p>
+                            <!-- UPDATED: Added accept attribute for MP4 -->
+                            <input type="file" id="file-upload" class="hidden" accept="image/*,application/pdf,video/mp4" onchange="handleFilePreview(this)">
                         </div>
 
                         <button onclick="submitProject()" id="btn-submit-project" class="w-full bg-emerald-500 text-white py-4 rounded-xl font-bold hover:bg-emerald-600 transition shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
