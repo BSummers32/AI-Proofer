@@ -274,27 +274,56 @@
                         </div>
                     </div>
 
-                    <!-- Right: Feedback -->
+                    <!-- Right: Feedback & Chat -->
                     <div class="w-[420px] bg-white border-l border-slate-200 flex flex-col overflow-hidden shadow-2xl z-20">
-                        <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
-                            <span class="font-bold text-slate-700 flex items-center gap-2">
-                                <svg width="16" height="16" class="text-emerald-500" fill="none" stroke="currentColor" stroke-width="3"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                AI Analysis
-                            </span>
-                            <div id="verification-badge" class="hidden bg-emerald-100 text-emerald-700 text-[10px] px-2 py-1 rounded font-bold border border-emerald-200 uppercase">Verified Revision</div>
+                        
+                        <!-- AI Analysis Section -->
+                        <div class="flex-1 flex flex-col min-h-0 border-b border-slate-200">
+                            <div class="p-3 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+                                <span class="font-bold text-slate-700 flex items-center gap-2 text-sm">
+                                    <svg width="16" height="16" class="text-emerald-500" fill="none" stroke="currentColor" stroke-width="3"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    AI Analysis
+                                </span>
+                                <div id="verification-badge" class="hidden bg-emerald-100 text-emerald-700 text-[10px] px-2 py-1 rounded font-bold border border-emerald-200 uppercase">Verified Revision</div>
+                            </div>
+                            <div id="ai-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller bg-slate-50/30">
+                                <!-- Injected -->
+                            </div>
+                        </div>
+
+                        <!-- Chat Section -->
+                        <div class="flex-1 flex flex-col min-h-0 bg-slate-50">
+                            <div class="p-3 border-b border-slate-200 flex justify-between items-center bg-white">
+                                <span class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                                    <svg width="16" height="16" class="text-blue-500" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                    Team Chat
+                                </span>
+                            </div>
+                            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 scroller">
+                                <!-- Messages injected here -->
+                            </div>
+                            <div class="p-3 border-t border-slate-200 bg-white">
+                                <form onsubmit="sendChatMessage(event)" class="flex gap-2">
+                                    <input type="text" id="chat-input" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Type a message..." autocomplete="off">
+                                    <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white rounded-lg px-3 py-2 transition">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                    </button>
+                                </form>
+                            </div>
                         </div>
                         
-                        <div id="ai-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller bg-slate-50/30">
-                            <!-- Injected -->
-                        </div>
-                        
+                        <!-- Manager Feedback (Review Action) -->
                         <div class="p-4 bg-white border-t border-slate-200 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)] shrink-0">
-                            <div class="font-bold text-slate-800 text-sm mb-2 flex items-center gap-2">
-                                <div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></div>
-                                Manager Feedback
+                            <div class="font-bold text-slate-800 text-sm mb-2 flex items-center justify-between">
+                                <span class="flex items-center gap-2">
+                                    <div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div>
+                                    Formal Review
+                                </span>
+                                <!-- Fix: Save Button added -->
+                                <button id="btn-save-comments" onclick="saveManagerComments()" class="hidden text-xs text-blue-500 hover:text-blue-700 font-bold">Save Draft</button>
                             </div>
                             <div id="manager-comments-display" class="text-sm text-slate-600 bg-slate-50 p-3 rounded border border-slate-100 min-h-[40px] mb-2 italic">No comments yet.</div>
-                            <textarea id="manager-input" class="w-full border border-slate-300 p-2 rounded text-sm hidden focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Type feedback here..."></textarea>
+                            <textarea id="manager-input" class="w-full border border-slate-300 p-2 rounded text-sm hidden focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Enter formal review comments here..."></textarea>
                         </div>
                     </div>
                 </div>
@@ -373,6 +402,7 @@
         let currentProject = null;
         let isRevisionMode = false;
         let originalImageSrc = null; // For diff
+        let chatUnsubscribe = null; // Listener cleanup
 
         // --- EMAIL NOTIFICATION HELPER ---
         async function sendNotification(toEmail, subject, htmlContent) {
@@ -711,12 +741,47 @@
         // --- PROJECT VIEW ---
         window.loadProject = async (id) => {
             hideAllViews();
+            
+            // Clean up old chat listener
+            if(chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
+
             document.getElementById('view-project').classList.remove('hidden');
+            
+            // 1. Subscribe to Project Data
             onSnapshot(doc(db, "projects", id), (snap) => {
                 if(snap.exists()) {
                     currentProject = { id: snap.id, ...snap.data() };
                     renderProjectView();
                 } else { showDashboard(); }
+            });
+
+            // 2. Subscribe to Chat Messages (Sub-collection)
+            const chatRef = query(collection(db, "projects", id, "messages"), orderBy("createdAt", "asc"));
+            chatUnsubscribe = onSnapshot(chatRef, (snapshot) => {
+                const container = document.getElementById('chat-messages');
+                container.innerHTML = '';
+                if(snapshot.empty) {
+                    container.innerHTML = '<div class="text-center text-xs text-slate-400 mt-4">Start the conversation...</div>';
+                }
+                snapshot.forEach(doc => {
+                    const msg = doc.data();
+                    const isMe = msg.senderId === currentUser.uid;
+                    const time = msg.createdAt ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '...';
+                    
+                    container.innerHTML += `
+                        <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                            <div class="flex items-end gap-2 max-w-[85%]">
+                                ${!isMe ? `<div class="w-6 h-6 rounded-full bg-slate-200 text-[10px] flex items-center justify-center font-bold text-slate-600 shrink-0" title="${msg.senderName}">${msg.senderName[0]}</div>` : ''}
+                                <div class="${isMe ? 'bg-blue-500 text-white' : 'bg-white border border-slate-200 text-slate-700'} rounded-2xl px-3 py-2 text-sm shadow-sm">
+                                    ${msg.text}
+                                </div>
+                            </div>
+                            <span class="text-[10px] text-slate-400 mt-1 mx-2">${time}</span>
+                        </div>
+                    `;
+                });
+                // Auto scroll to bottom
+                container.scrollTop = container.scrollHeight;
             });
         };
 
@@ -808,18 +873,29 @@
 
             // Manager Comments
             document.getElementById('manager-comments-display').innerText = p.managerComments || "No comments yet.";
-
+            
             // Actions
             const actions = document.getElementById('action-buttons');
             actions.innerHTML = '';
             
+            // Reset visibility
+            document.getElementById('manager-input').classList.add('hidden');
+            document.getElementById('btn-save-comments').classList.add('hidden');
+
             if(p.creatorId === currentUser.uid) {
                 if(p.status === 'Draft') actions.innerHTML = `<button onclick="openAssignModal()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Assign Reviewer</button>`;
                 if(p.status === 'Changes Requested') actions.innerHTML = `<button onclick="startUpload(true)" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Upload Revision</button>`;
             } 
             if(isReviewer && p.status === 'Needs Review') {
-                document.getElementById('manager-input').classList.remove('hidden');
-                document.getElementById('manager-input').value = p.managerComments || "";
+                // Show Inputs for Reviewer
+                const commentBox = document.getElementById('manager-input');
+                const saveBtn = document.getElementById('btn-save-comments');
+                
+                commentBox.classList.remove('hidden');
+                saveBtn.classList.remove('hidden');
+                
+                commentBox.value = p.managerComments || "";
+                
                 actions.innerHTML = `
                     <button onclick="submitReview('Changes Requested')" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition">Request Changes</button>
                     <button onclick="openChecklist()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Approve Concept</button>
@@ -843,6 +919,45 @@
             const p = Math.max(0, Math.min(100, (x / rect.width) * 100));
             document.getElementById('diff-resize').style.width = p + '%';
             document.getElementById('diff-handle').style.left = p + '%';
+        };
+
+        // --- CHAT FEATURE ---
+        window.sendChatMessage = async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if(!text || !currentProject) return;
+
+            try {
+                await addDoc(collection(db, "projects", currentProject.id, "messages"), {
+                    text: text,
+                    senderId: currentUser.uid,
+                    senderName: currentUser.displayName,
+                    createdAt: serverTimestamp()
+                });
+                input.value = '';
+            } catch(err) {
+                console.error("Chat error:", err);
+            }
+        };
+
+        // --- MANAGER COMMENTS (SAVE DRAFT) ---
+        window.saveManagerComments = async () => {
+            const val = document.getElementById('manager-input').value;
+            const btn = document.getElementById('btn-save-comments');
+            try {
+                await updateDoc(doc(db, "projects", currentProject.id), { 
+                    managerComments: val 
+                });
+                // Simple visual feedback
+                const originalText = btn.innerText;
+                btn.innerText = "Saved!";
+                btn.classList.add('text-green-600');
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.classList.remove('text-green-600');
+                }, 2000);
+            } catch(e) { alert("Error saving draft: " + e.message); }
         };
 
         // --- ASSIGN ---
