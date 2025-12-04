@@ -26,12 +26,12 @@ exports.handler = async (event, context) => {
       mimeType, 
       isBinary, 
       expectedEdits = [],
-      // New Context Fields
       targetAudience = "General Audience",
       styleGuide = "Standard Grammar Rules"
     } = payload;
 
     const genAI = new GoogleGenerativeAI(apiKey);
+    // Use gemini-1.5-flash for video support (or 2.5-flash if available in preview)
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
     
     let systemPrompt = "";
@@ -50,11 +50,16 @@ exports.handler = async (event, context) => {
         case "signage": toneInstruction = "Focus on brevity, high impact, and clarity."; break;
         case "social": toneInstruction = "Focus on engagement, hashtags, and a casual/fun tone."; break;
         case "policy": toneInstruction = "Focus on professional, formal, and legally precise language."; break;
+        case "digital": toneInstruction = "Focus on readability and SEO."; break;
         default: toneInstruction = "Focus on readability and grammar.";
       }
 
+      const videoInstruction = mimeType.startsWith("video/") ? 
+        "This is a video file. Analyze the visual text (titles, chyrons, signage) AND the spoken audio transcript for errors. Treat spoken words as the 'content'." : "";
+
       systemPrompt = `
         You are a professional content editor for ${mediaType}. ${toneInstruction}
+        ${videoInstruction}
         
         CONTEXT:
         - Target Audience: ${targetAudience}
@@ -63,10 +68,10 @@ exports.handler = async (event, context) => {
         Return ONLY a raw JSON array of objects.
         Each object must have:
         - "id": A unique number
-        - "original": The exact text to change
+        - "original": The exact text (or visual text) to change
         - "fix": The suggested replacement
         - "reason": A brief explanation
-        - "confidence": "High", "Medium", or "Low" (Based on grammar rules vs stylistic preference)
+        - "confidence": "High", "Medium", or "Low"
       `;
     }
 
