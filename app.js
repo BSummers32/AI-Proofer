@@ -18,6 +18,9 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 const provider = new GoogleAuthProvider();
 
+// Request access to Google Tasks
+provider.addScope('https://www.googleapis.com/auth/tasks');
+
 // State
 let currentUser = null;
 let currentUserData = null; 
@@ -28,48 +31,181 @@ let chatUnsubscribe = null;
 let fileToUpload = null;
 let fileBase64 = null;
 
-// --- GLOBAL BINDINGS (Fixes Button Clicks) ---
+// --- GOOGLE TASKS SERVICE ---
+const TaskService = {
+    async getAccessToken() {
+        return sessionStorage.getItem('google_access_token');
+    },
+
+    async ensureTaskList(token) {
+        // 1. Check if we already have the list ID stored
+        let listId = localStorage.getItem('pb_task_list_id');
+        if (listId) return listId;
+
+        // 2. Fetch lists from Google
+        try {
+            const res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            const data = await res.json();
+            
+            // 3. Look for "Proof Buddy"
+            const existing = data.items.find(l => l.title === 'Proof Buddy');
+            if (existing) {
+                localStorage.setItem('pb_task_list_id', existing.id);
+                return existing.id;
+            }
+
+            // 4. Create if missing
+            const createRes = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
+                method: 'POST',
+                headers: { 
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ title: 'Proof Buddy' })
+            });
+            const newList = await createRes.json();
+            localStorage.setItem('pb_task_list_id', newList.id);
+            return newList.id;
+
+        } catch (e) {
+            console.error("Error ensuring task list:", e);
+            return null;
+        }
+    },
+
+    async createTask(title, dueDateStr) {
+        const token = await this.getAccessToken();
+        if (!token) return; // User might need to re-login to sync
+
+        const listId = await this.ensureTaskList(token);
+        if (!listId) return;
+
+        const payload = { title: title };
+        
+        // Format Date for Google Tasks (RFC 3339)
+        if (dueDateStr) {
+            // Append T09:00:00Z to make it a morning deadline, or just use date
+            // Google Tasks 'due' needs strict RFC 3339 timestamp format
+            const date = new Date(dueDateStr);
+            date.setHours(9, 0, 0, 0); // Set to 9 AM
+            payload.due = date.toISOString();
+        }
+
+        try {
+            await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks`, {
+                method: 'POST',
+                headers: { 
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            console.log(`Task created: ${title}`);
+        } catch (e) {
+            console.error("Task creation failed:", e);
+        }
+    }
+};
+
+// --- SYNC ENGINE ---
+async function syncProjectTasks(projects) {
+    if (!currentUser) return;
+    
+    // We use a subcollection in the User profile to track which tasks we've already created
+    // This prevents creating duplicate tasks every time the dashboard loads.
+    // Structure: users/{uid}/taskTracking/{projectId} -> { lastStatus: 'Needs Review' }
+    
+    for (const p of projects) {
+        let actionNeeded = null;
+        let taskSuffix = "";
+
+        // 1. Determine if a Task is needed based on User Role & Status
+        const isReviewer = p.reviewerId === currentUser.uid;
+        const isCreator = p.creatorId === currentUser.uid;
+
+        if (isReviewer && p.status === 'Needs Review') {
+            if (p.revisionCount > 0) {
+                actionNeeded = 'Has been revised';
+            } else {
+                actionNeeded = 'Needs review';
+            }
+        } else if (isCreator && p.status === 'Changes Requested') {
+            actionNeeded = 'Has comments';
+        } else if (isCreator && p.status === 'Approved') {
+            actionNeeded = 'Approved'; // Optional: Notify creator of approval
+        }
+
+        // 2. If action needed, check if we already created this specific task
+        if (actionNeeded) {
+            const trackRef = doc(db, "users", currentUser.uid, "taskTracking", p.id);
+            const trackSnap = await getDoc(trackRef);
+            const trackData = trackSnap.data();
+
+            // Only create if we haven't tracked this status yet
+            if (!trackData || trackData.lastStatus !== p.status) {
+                const taskTitle = `${p.title} - ${actionNeeded}`;
+                
+                // Use 'deadlineNext' for the due date
+                await TaskService.createTask(taskTitle, p.deadlineNext);
+
+                // Update tracking so we don't do it again
+                await setDoc(trackRef, { lastStatus: p.status, updatedAt: serverTimestamp() });
+            }
+        }
+    }
+}
+
+
+// --- GLOBAL BINDINGS ---
 window.toggleSidebar = () => {
     document.getElementById('sidebar').classList.toggle('collapsed');
 };
 
-window.signIn = () => signInWithPopup(auth, provider).catch(e => { 
-    document.getElementById('login-error').innerText = e.message; 
-    document.getElementById('login-error').classList.remove('hidden'); 
-});
+window.signIn = () => {
+    signInWithPopup(auth, provider)
+        .then((result) => {
+            // Google Access Token for Tasks API
+            const credential = GoogleAuthProvider.credentialFromResult(result);
+            const token = credential.accessToken;
+            if (token) {
+                sessionStorage.setItem('google_access_token', token);
+            }
+        })
+        .catch(e => { 
+            document.getElementById('login-error').innerText = e.message; 
+            document.getElementById('login-error').classList.remove('hidden'); 
+        });
+};
 
-window.logout = () => signOut(auth);
+window.logout = () => {
+    sessionStorage.removeItem('google_access_token');
+    signOut(auth);
+};
 
-// --- NAVIGATION & TABS (Fixes Glitch #1) ---
+// --- NAVIGATION & TABS ---
 window.showDashboard = () => { hideAllViews(); document.getElementById('view-dashboard').classList.remove('hidden'); loadDashboard(); };
 window.showArchived = () => { hideAllViews(); document.getElementById('view-archived').classList.remove('hidden'); loadArchived(); };
 
 window.switchTab = (tabId) => {
-    // Hide all tabs
     ['tab-ai', 'tab-review', 'tab-chat'].forEach(t => document.getElementById(t).classList.add('hidden'));
-    // Deactivate all buttons
     ['btn-tab-ai', 'btn-tab-review', 'btn-tab-chat'].forEach(b => document.getElementById(b).classList.remove('active'));
-    
-    // Show selected
     document.getElementById(tabId).classList.remove('hidden');
     document.getElementById('btn-' + tabId).classList.add('active');
 };
 
-// --- FILE HANDLING (Fixes Glitch #2 & Adds MP4) ---
+// --- FILE HANDLING ---
 window.handleFilePreview = (input) => {
     if(input.files && input.files[0]) {
         fileToUpload = input.files[0];
         document.getElementById('file-preview-name').innerText = fileToUpload.name;
-        
-        // Show loading state if large file
         if(fileToUpload.size > 5 * 1024 * 1024) {
             document.getElementById('file-preview-name').innerText += " (Processing...)";
         }
-
         const reader = new FileReader();
         reader.onload = (e) => {
             fileBase64 = e.target.result;
-            // Restore name after processing
             document.getElementById('file-preview-name').innerText = fileToUpload.name; 
         };
         reader.readAsDataURL(fileToUpload);
@@ -81,7 +217,6 @@ window.startUpload = (revisionMode = false) => {
     hideAllViews();
     document.getElementById('view-wizard').classList.remove('hidden');
     
-    // Reset fields
     fileToUpload = null;
     fileBase64 = null;
     document.getElementById('file-upload').value = '';
@@ -117,7 +252,6 @@ window.submitProject = async () => {
     statusMsg.classList.remove('hidden');
 
     try {
-        // Strip data:image/png;base64, prefix for the API
         const contentRaw = fileBase64.split(',')[1];
         const mimeType = fileToUpload.type;
         const isImage = mimeType.startsWith('image/');
@@ -143,7 +277,6 @@ window.submitProject = async () => {
             }
         }
 
-        // Call Netlify Function
         const res = await fetch('/.netlify/functions/proof-read', { 
             method: 'POST', 
             body: JSON.stringify(payload) 
@@ -152,7 +285,6 @@ window.submitProject = async () => {
         if(!res.ok) throw new Error("AI Analysis Failed. File might be too large for free tier.");
         let suggestions = await res.json();
         
-        // Format suggestions
         if(payload.mode === 'verify') {
             suggestions = suggestions.map((r, i) => ({
                 id: i, original: "Pending Fix", fix: r.fix, 
@@ -163,7 +295,6 @@ window.submitProject = async () => {
             suggestions = suggestions.map(s => ({...s, status: 'pending'}));
         }
 
-        // Upload to Firebase Storage
         const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
         await uploadString(storageRef, fileBase64, 'data_url');
         const url = await getDownloadURL(storageRef);
@@ -248,6 +379,7 @@ async function loadDashboard() {
     const firstDay = new Date(today.setDate(today.getDate() - today.getDay() + 1));
     const lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 7));
     
+    // FETCH TEAM PROJECTS (All projects not archived)
     onSnapshot(query(collection(db, "projects")), (snapshot) => {
         const container = document.getElementById('list-team-projects');
         container.innerHTML = '';
@@ -273,8 +405,14 @@ async function loadDashboard() {
         
         if(docs.length === 0) container.innerHTML = '<div class="p-8 text-center text-slate-400">No active projects.</div>';
         docs.forEach(data => renderTeamRow(data, data.id, container));
+
+        // --- TRIGGER TASK SYNC (Creator Actions) ---
+        // We scan all projects to see if we (as creator) need to do something
+        const myProjects = docs.filter(d => d.creatorId === currentUser.uid);
+        syncProjectTasks(myProjects);
     });
 
+    // FETCH ASSIGNED TO ME
     onSnapshot(query(collection(db, "projects"), where("reviewerId", "==", currentUser.uid)), (snapshot) => {
         const container = document.getElementById('list-assigned-docs');
         const badge = document.getElementById('badge-assigned');
@@ -292,6 +430,9 @@ async function loadDashboard() {
             badge.innerText = docs.length;
             docs.forEach(data => renderCard(data, data.id, container));
         }
+
+        // --- TRIGGER TASK SYNC (Reviewer Actions) ---
+        syncProjectTasks(docs);
     });
 }
 
@@ -374,7 +515,7 @@ function renderCard(data, id, container) {
                 ${badge}
                 ${chatIndicator}
             </div>
-            <span class="text-emerald-400 font-bold text-[10px] uppercase ml-auto">${data.status}</span>
+            <span class="text-emerald-400 font-bold text-[10px] uppercase ml-2">${data.status}</span>
         </div>
         <h4 class="font-bold text-sm mb-3 text-white truncate">${data.title}</h4>
         <div class="flex justify-between items-end">
@@ -385,7 +526,7 @@ function renderCard(data, id, container) {
     container.appendChild(div);
 }
 
-// --- PROJECT VIEW (Updated for MP4) ---
+// --- PROJECT VIEW ---
 window.loadProject = async (id) => {
     hideAllViews();
     if(chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
@@ -433,12 +574,10 @@ function renderProjectView() {
     const diffMsg = document.getElementById('diff-toggle-msg');
     docContainer.innerHTML = '';
     
-    // MP4 & Image Logic
     if(p.status === 'Archived') {
         docContainer.innerHTML = '<div class="p-12 text-center text-slate-400 italic">Project Archived.</div>';
         diffContainer.classList.add('hidden');
     } else {
-        // Reset Diff Mode
         docContainer.classList.remove('hidden');
         diffContainer.classList.add('hidden');
         diffMsg.classList.add('hidden');
@@ -449,7 +588,6 @@ function renderProjectView() {
         } else if(p.fileMime === 'application/pdf') {
             docContainer.innerHTML = `<iframe src="${p.fileURL}" class="w-full h-full border-0 rounded"></iframe>`;
         } else if(p.fileMime.startsWith('video/')) {
-            // New Video Player
             docContainer.innerHTML = `
                 <div class="bg-black rounded-xl overflow-hidden shadow-lg w-full flex justify-center">
                     <video controls src="${p.fileURL}" class="max-h-[600px] max-w-full"></video>
@@ -462,7 +600,6 @@ function renderProjectView() {
     const isReviewer = p.reviewerId === currentUser.uid;
     const canEdit = (p.creatorId === currentUser.uid || isReviewer) && p.status !== 'Approved' && p.status !== 'Archived';
 
-    // Render Lists (AI, Manual) - SAME AS BEFORE
     const aiList = document.getElementById('ai-feedback-list');
     aiList.innerHTML = '';
     if(!p.aiSuggestions || p.aiSuggestions.length === 0) aiList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No AI suggestions found.</div>';
