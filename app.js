@@ -34,6 +34,7 @@ const getStatusPill = (status) => {
         case 'Needs Review': return `<span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded uppercase border border-blue-200">Review</span>`;
         case 'Changes Requested': return `<span class="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-1 rounded uppercase border border-red-200">Revise</span>`;
         case 'Approved': return `<span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded uppercase border border-emerald-200">Done</span>`;
+        case 'Archived': return `<span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-200">Archived</span>`;
         default: return `<span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-200">Draft</span>`;
     }
 };
@@ -46,6 +47,7 @@ const TaskService = {
         if (listId) return listId;
         try {
             const res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', { headers: { Authorization: `Bearer ${token}` } });
+            if(!res.ok) throw new Error("Failed to fetch lists");
             const data = await res.json();
             const existing = data.items.find(l => l.title === 'Proof Buddy');
             if (existing) { localStorage.setItem('pb_task_list_id', existing.id); return existing.id; }
@@ -57,20 +59,25 @@ const TaskService = {
             const newList = await createRes.json();
             localStorage.setItem('pb_task_list_id', newList.id);
             return newList.id;
-        } catch (e) { console.error(e); return null; }
+        } catch (e) { console.error("Task List Error:", e); return null; }
     },
     async createTask(title, dueDateStr) {
         const token = await this.getAccessToken();
-        if (!token) return;
+        if (!token) { console.warn("No Google Task token found"); return; }
         const listId = await this.ensureTaskList(token);
         if (!listId) return;
         const payload = { title: title };
         if (dueDateStr) { const date = new Date(dueDateStr); date.setHours(9, 0, 0, 0); payload.due = date.toISOString(); }
-        await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        }).catch(e => console.error(e));
+        
+        try {
+            const res = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if(!res.ok) console.error("Failed to create task", await res.text());
+            else console.log("Task created:", title);
+        } catch(e) { console.error(e); }
     }
 };
 
@@ -147,26 +154,32 @@ window.startUpload = (revisionMode = false) => {
     fileBase64 = null;
     document.getElementById('file-upload').value = '';
     document.getElementById('file-preview-name').innerText = "Click to upload document or video";
-    document.getElementById('upload-status').classList.add('hidden'); // Fix #7
+    document.getElementById('upload-status').classList.add('hidden'); 
     document.getElementById('btn-submit-project').disabled = false;
-    document.getElementById('input-deadline-final').value = ''; // Fix #2
-    document.getElementById('input-deadline-next').value = '';  // Fix #2
 
-    const t = document.getElementById('input-title');
+    // FIX FOR DATES
     if(isRevisionMode && currentProject) {
         document.getElementById('wizard-title').innerText = "Upload Revision";
-        t.value = currentProject.title; 
-        t.disabled = true;
+        document.getElementById('input-title').value = currentProject.title; 
+        document.getElementById('input-title').disabled = true;
         document.getElementById('type-group').classList.add('hidden');
         document.getElementById('context-group').classList.add('hidden');
         document.getElementById('btn-submit-project').innerText = "Verify Revision";
+        
+        // Revision: Keep Final Deadline, Clear Next Steps
+        document.getElementById('input-deadline-final').value = currentProject.deadlineFinal || '';
+        document.getElementById('input-deadline-next').value = ''; 
     } else {
         document.getElementById('wizard-title').innerText = "Upload New Content";
-        t.value = "";
-        t.disabled = false;
+        document.getElementById('input-title').value = "";
+        document.getElementById('input-title').disabled = false;
         document.getElementById('type-group').classList.remove('hidden');
         document.getElementById('context-group').classList.remove('hidden');
         document.getElementById('btn-submit-project').innerText = "Analyze & Save Project";
+        
+        // New Project: Clear Both
+        document.getElementById('input-deadline-final').value = ''; 
+        document.getElementById('input-deadline-next').value = '';  
     }
 };
 
@@ -205,7 +218,6 @@ window.submitProject = async () => {
             priority: document.getElementById('input-priority').value
         };
 
-        // FIX #8: Robust Verify Logic
         if(isRevisionMode && currentProject.aiSuggestions && currentProject.aiSuggestions.length > 0) {
             const accepted = currentProject.aiSuggestions.filter(s => s.status === 'accepted');
             if(accepted.length > 0) {
@@ -215,7 +227,7 @@ window.submitProject = async () => {
         }
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); // Increased timeout
+        const timeoutId = setTimeout(() => controller.abort(), 45000); 
 
         let suggestions = [];
         try {
@@ -241,7 +253,6 @@ window.submitProject = async () => {
             }
         } catch(fetchError) {
              console.warn("AI Analysis skipped or failed", fetchError);
-             // Allow upload to continue even if AI fails
         }
 
         const commonData = {
@@ -263,7 +274,10 @@ window.submitProject = async () => {
                 isRevision: true,
                 revisionCount: newCount 
             });
-            if(currentProject.reviewerEmail) sendNotification(currentProject.reviewerEmail, `Revision Uploaded: ${currentProject.title}`, `New revision available.`);
+            // FIX: Use stored email for notification
+            if(currentProject.reviewerEmail) {
+                sendNotification(currentProject.reviewerEmail, `Revision Uploaded: ${currentProject.title}`, `<p>A new revision for <b>${currentProject.title}</b> is available for review.</p>`);
+            }
             window.loadProject(currentProject.id);
         } else {
             const docRef = await addDoc(collection(db, "projects"), {
@@ -291,8 +305,10 @@ window.submitProject = async () => {
 };
 
 async function sendNotification(email, subject, html) {
+    if(!email) return;
     try {
         await fetch('/.netlify/functions/send-email', { method: 'POST', body: JSON.stringify({ to: email, subject, html }) });
+        console.log("Email sent to", email);
     } catch(e) { console.error("Email failed", e); }
 }
 
@@ -321,7 +337,6 @@ async function loadDashboard() {
     const firstDay = new Date(today.setDate(today.getDate() - today.getDay() + 1));
     const lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 7));
     
-    // FETCH ALL PROJECTS
     onSnapshot(query(collection(db, "projects")), (snapshot) => {
         const containerAll = document.getElementById('list-all-projects');
         const containerMy = document.getElementById('list-my-projects');
@@ -348,11 +363,9 @@ async function loadDashboard() {
         document.getElementById('stat-due').innerText = dueThisWeek;
         allDocs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         
-        // RENDER ALL
         if(allDocs.length === 0) containerAll.innerHTML = '<div class="p-4 text-center text-slate-400">No active projects.</div>';
         allDocs.forEach(data => renderTeamRow(data, data.id, containerAll, false));
 
-        // RENDER MY PROJECTS (Created by me)
         const myDocs = allDocs.filter(d => d.creatorId === currentUser.uid);
         if(myDocs.length === 0) containerMy.innerHTML = '<div class="p-8 text-center text-slate-400">No projects created.</div>';
         myDocs.forEach(data => renderTeamRow(data, data.id, containerMy, true));
@@ -360,7 +373,6 @@ async function loadDashboard() {
         syncProjectTasks(myDocs);
     });
 
-    // FETCH ASSIGNED TO ME
     onSnapshot(query(collection(db, "projects"), where("reviewerId", "==", currentUser.uid)), (snapshot) => {
         const container = document.getElementById('list-assigned-docs');
         const badge = document.getElementById('badge-assigned');
@@ -382,11 +394,27 @@ async function loadDashboard() {
     });
 }
 
+// FIX: New function to load archived projects
+async function loadArchived() {
+    if(!currentUser) return;
+    const q = query(collection(db, "projects"), where("status", "==", "Archived"), orderBy("archivedAt", "desc"));
+    onSnapshot(q, (snap) => {
+        const container = document.getElementById('list-archived-docs');
+        container.innerHTML = '';
+        if(snap.empty) {
+            container.innerHTML = '<div class="p-8 text-center text-slate-400">No archived projects.</div>';
+            return;
+        }
+        snap.forEach(doc => {
+            renderTeamRow(doc.data(), doc.id, container, false);
+        });
+    });
+}
+
 function renderTeamRow(data, id, container, isMyProjectView) {
     const div = document.createElement('div');
     div.className = "grid grid-cols-12 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center transition group cursor-pointer relative";
     
-    // PILL STATUS
     const statusPill = getStatusPill(data.status);
     
     let revisionText = data.revisionCount > 0 ? `${data.revisionCount} Revision` : "Original";
@@ -395,10 +423,11 @@ function renderTeamRow(data, id, container, isMyProjectView) {
                         `<span class="text-slate-400 text-xs">Normal</span>`;
 
     const nextDate = data.deadlineNext ? new Date(data.deadlineNext).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
+    
+    // Allow delete if owner/reviewer
     const deleteBtn = (data.creatorId === currentUser.uid || data.reviewerId === currentUser.uid) ? 
         `<button onclick="deleteProject('${id}', '${data.storagePath || ''}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition z-10 relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` : `<div class="w-8"></div>`;
 
-    // NOTIFICATIONS (Fix #6)
     let notifyDot = '';
     if(isMyProjectView && data.status === 'Changes Requested') {
         notifyDot = `<span class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>`;
@@ -489,9 +518,11 @@ function renderProjectView() {
     const diffMsg = document.getElementById('diff-toggle-msg');
     docContainer.innerHTML = '';
     
+    // ARCHIVE HANDLING
     if(p.status === 'Archived') {
-        docContainer.innerHTML = '<div class="p-12 text-center text-slate-400 italic">Project Archived.</div>';
+        docContainer.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-slate-400"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="mb-4"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg><p class="text-lg font-bold">File Deleted (Archived)</p><p class="text-sm">Metadata, notes, and chat are preserved.</p></div>';
         diffContainer.classList.add('hidden');
+        diffMsg.classList.add('hidden');
     } else {
         docContainer.classList.remove('hidden');
         diffContainer.classList.add('hidden');
@@ -513,6 +544,7 @@ function renderProjectView() {
     const canEdit = (p.creatorId === currentUser.uid || isReviewer) && p.status !== 'Approved' && p.status !== 'Archived';
     const isCreator = p.creatorId === currentUser.uid;
 
+    // AI Suggestions List
     const aiList = document.getElementById('ai-feedback-list');
     aiList.innerHTML = '';
     if(!p.aiSuggestions || p.aiSuggestions.length === 0) aiList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No AI suggestions found.</div>';
@@ -551,7 +583,7 @@ function renderProjectView() {
         </div>`;
     });
 
-    // MANUAL NOTES (With Checkbox Fix #5)
+    // Manual Notes
     const manualList = document.getElementById('manual-feedback-list');
     manualList.innerHTML = '';
     if(!p.reviewerSuggestions || p.reviewerSuggestions.length === 0) manualList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No reviewer notes yet.</div>';
@@ -585,6 +617,7 @@ function renderProjectView() {
             <button onclick="openChecklist()" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Approve Concept</button>
         `;
     }
+    // Updated: Allow archiving if status is Approved (viewable by involved parties)
     if(p.status === 'Approved' && (p.creatorId === currentUser.uid || isReviewer)) {
         actions.innerHTML = `<button onclick="finalizeProject()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-900 transition shadow-lg">Final Commit (Archive)</button>`;
     }
@@ -596,7 +629,6 @@ window.updateSuggestion = async (i, s) => {
     await updateDoc(doc(db, "projects", currentProject.id), { aiSuggestions: newS });
 };
 
-// Toggle Checkbox for Manual Notes
 window.toggleManualNote = async (idx) => {
     if(!currentProject) return;
     const notes = [...currentProject.reviewerSuggestions];
@@ -649,9 +681,15 @@ window.openAssignModal = async () => {
         div.className = "user-bubble cursor-pointer flex flex-col items-center p-3 rounded-xl border border-transparent transition bg-slate-50 hover:bg-white hover:shadow-md border hover:border-emerald-100";
         div.onclick = async () => {
             if(confirm(`Assign ${u.displayName}?`)) {
-                await updateDoc(doc(db, "projects", currentProject.id), { reviewerId: u.uid, reviewerName: u.displayName, status: 'Needs Review' });
+                // FIX: Save reviewer email here
+                await updateDoc(doc(db, "projects", currentProject.id), { 
+                    reviewerId: u.uid, 
+                    reviewerName: u.displayName, 
+                    reviewerEmail: u.email, // <--- SAVED
+                    status: 'Needs Review' 
+                });
                 if (u.email) sendNotification(u.email, `New Assignment: ${currentProject.title}`, `<p>You have been assigned to review <b>${currentProject.title}</b>.</p><p>Please log in to Proof Buddy to view it.</p>`);
-                window.closeModal('modal-assign'); // Fix #1
+                window.closeModal('modal-assign'); 
             }
         };
         div.innerHTML = `<img src="${u.photoURL}" class="w-12 h-12 rounded-full mb-2 shadow-sm"><span class="text-xs font-bold text-slate-700">${u.displayName.split(' ')[0]}</span>`;
@@ -673,7 +711,7 @@ window.submitReview = async (status) => {
 };
 
 window.finalizeProject = async () => {
-    if(!confirm("Archive and delete source file?")) return;
+    if(!confirm("Archive and delete source file? Metadata and chat will be preserved.")) return;
     try {
         if(currentProject.storagePath) await deleteObject(ref(storage, currentProject.storagePath));
         await updateDoc(doc(db, "projects", currentProject.id), { status: 'Archived', fileURL: null, archivedAt: serverTimestamp() });
