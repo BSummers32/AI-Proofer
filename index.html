@@ -13,6 +13,19 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- External Styles -->
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Collapsible Transition */
+        .collapsible-content {
+            transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+        }
+        .collapsible-content.open {
+            max-height: 500px; /* Arbitrary large height */
+            opacity: 1;
+        }
+    </style>
 </head>
 <body class="bg-slate-50 text-slate-800 h-screen flex overflow-hidden">
 
@@ -102,18 +115,37 @@
                         </div>
                     </div>
 
+                    <!-- NEW: ALL PROJECTS (Collapsible) -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col mb-8">
+                        <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition" onclick="toggleAllProjects()">
+                            <h3 class="font-bold text-sm text-slate-600 uppercase tracking-wide">All Company Projects</h3>
+                            <svg id="all-projects-arrow" class="text-slate-400 transform transition duration-300" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </div>
+                        <div id="container-all-projects" class="collapsible-content bg-white">
+                             <div class="grid grid-cols-12 px-5 py-3 bg-slate-50/50 text-[10px] font-bold text-slate-400 uppercase tracking-wider shrink-0 border-b border-slate-50">
+                                <div class="col-span-1 text-center"></div>
+                                <div class="col-span-4">Project Name</div>
+                                <div class="col-span-2">Status</div>
+                                <div class="col-span-2">Priority</div>
+                                <div class="col-span-1">Owner</div>
+                                <div class="col-span-2 text-right">Deadlines</div>
+                            </div>
+                            <div id="list-all-projects" class="divide-y divide-slate-50 p-2 max-h-[300px] overflow-y-auto scroller">
+                                <!-- All Projects Injected Here -->
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full min-h-[500px]">
-                        <!-- TEAM PROJECTS -->
+                        <!-- MY PROJECTS (Was Team Projects) -->
                         <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
                             <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-                                <h3 class="font-bold text-lg text-slate-800">Team Projects</h3>
+                                <h3 class="font-bold text-lg text-slate-800">My Projects</h3>
                                 <div class="flex gap-2 text-xs">
-                                    <span class="flex items-center gap-1 text-slate-400"><span class="w-2 h-2 rounded-full bg-red-500"></span> Urgent</span>
-                                    <span class="flex items-center gap-1 text-slate-400"><span class="w-2 h-2 rounded-full bg-blue-400"></span> Normal</span>
+                                    <span class="flex items-center gap-1 text-slate-400"><span class="w-2 h-2 rounded-full bg-red-500"></span> Action Req.</span>
                                 </div>
                             </div>
                             
-                            <!-- UPDATED COLUMNS -->
                             <div class="grid grid-cols-12 px-5 py-3 bg-slate-50/50 text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">
                                 <div class="col-span-1 text-center"></div>
                                 <div class="col-span-4">Project Name</div>
@@ -123,7 +155,7 @@
                                 <div class="col-span-2 text-right">Deadlines</div>
                             </div>
 
-                            <div id="list-team-projects" class="divide-y divide-slate-50 p-2 overflow-y-auto scroller">
+                            <div id="list-my-projects" class="divide-y divide-slate-50 p-2 overflow-y-auto scroller">
                                 <!-- JS Injected -->
                             </div>
                         </div>

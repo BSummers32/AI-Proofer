@@ -17,8 +17,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 const provider = new GoogleAuthProvider();
-
-// Request access to Google Tasks
 provider.addScope('https://www.googleapis.com/auth/tasks');
 
 // State
@@ -26,147 +24,97 @@ let currentUser = null;
 let currentUserData = null; 
 let currentProject = null;
 let isRevisionMode = false;
-let originalImageSrc = null; 
 let chatUnsubscribe = null; 
 let fileToUpload = null;
 let fileBase64 = null;
 
+// --- UTILS: SHORT STATUS PILLS ---
+const getStatusPill = (status) => {
+    switch(status) {
+        case 'Needs Review': return `<span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded uppercase border border-blue-200">Review</span>`;
+        case 'Changes Requested': return `<span class="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-1 rounded uppercase border border-red-200">Revise</span>`;
+        case 'Approved': return `<span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded uppercase border border-emerald-200">Done</span>`;
+        default: return `<span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded uppercase border border-slate-200">Draft</span>`;
+    }
+};
+
 // --- GOOGLE TASKS SERVICE ---
 const TaskService = {
-    async getAccessToken() {
-        return sessionStorage.getItem('google_access_token');
-    },
-
+    async getAccessToken() { return sessionStorage.getItem('google_access_token'); },
     async ensureTaskList(token) {
         let listId = localStorage.getItem('pb_task_list_id');
         if (listId) return listId;
-
         try {
-            const res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', { headers: { Authorization: `Bearer ${token}` } });
             const data = await res.json();
-            
             const existing = data.items.find(l => l.title === 'Proof Buddy');
-            if (existing) {
-                localStorage.setItem('pb_task_list_id', existing.id);
-                return existing.id;
-            }
-
+            if (existing) { localStorage.setItem('pb_task_list_id', existing.id); return existing.id; }
             const createRes = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
                 method: 'POST',
-                headers: { 
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: 'Proof Buddy' })
             });
             const newList = await createRes.json();
             localStorage.setItem('pb_task_list_id', newList.id);
             return newList.id;
-
-        } catch (e) {
-            console.error("Error ensuring task list:", e);
-            return null;
-        }
+        } catch (e) { console.error(e); return null; }
     },
-
     async createTask(title, dueDateStr) {
         const token = await this.getAccessToken();
         if (!token) return;
-
         const listId = await this.ensureTaskList(token);
         if (!listId) return;
-
         const payload = { title: title };
-        if (dueDateStr) {
-            const date = new Date(dueDateStr);
-            date.setHours(9, 0, 0, 0); 
-            payload.due = date.toISOString();
-        }
-
-        try {
-            await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks`, {
-                method: 'POST',
-                headers: { 
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-            console.log(`Task created: ${title}`);
-        } catch (e) {
-            console.error("Task creation failed:", e);
-        }
+        if (dueDateStr) { const date = new Date(dueDateStr); date.setHours(9, 0, 0, 0); payload.due = date.toISOString(); }
+        await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).catch(e => console.error(e));
     }
 };
 
-// --- SYNC ENGINE ---
 async function syncProjectTasks(projects) {
     if (!currentUser) return;
-    
     for (const p of projects) {
         let actionNeeded = null;
-
         const isReviewer = p.reviewerId === currentUser.uid;
         const isCreator = p.creatorId === currentUser.uid;
-
-        if (isReviewer && p.status === 'Needs Review') {
-            if (p.revisionCount > 0) {
-                actionNeeded = 'Has been revised';
-            } else {
-                actionNeeded = 'Needs review';
-            }
-        } else if (isCreator && p.status === 'Changes Requested') {
-            actionNeeded = 'Has comments';
-        } else if (isCreator && p.status === 'Approved') {
-            actionNeeded = 'Approved';
-        }
+        if (isReviewer && p.status === 'Needs Review') actionNeeded = p.revisionCount > 0 ? 'Has been revised' : 'Needs review';
+        else if (isCreator && p.status === 'Changes Requested') actionNeeded = 'Has comments';
+        else if (isCreator && p.status === 'Approved') actionNeeded = 'Approved';
 
         if (actionNeeded) {
             const trackRef = doc(db, "users", currentUser.uid, "taskTracking", p.id);
             const trackSnap = await getDoc(trackRef);
             const trackData = trackSnap.data();
-
             if (!trackData || trackData.lastStatus !== p.status) {
-                const taskTitle = `${p.title} - ${actionNeeded}`;
-                await TaskService.createTask(taskTitle, p.deadlineNext);
+                await TaskService.createTask(`${p.title} - ${actionNeeded}`, p.deadlineNext);
                 await setDoc(trackRef, { lastStatus: p.status, updatedAt: serverTimestamp() });
             }
         }
     }
 }
 
-
 // --- GLOBAL BINDINGS ---
-window.toggleSidebar = () => {
-    document.getElementById('sidebar').classList.toggle('collapsed');
+window.toggleSidebar = () => document.getElementById('sidebar').classList.toggle('collapsed');
+window.toggleAllProjects = () => {
+    const el = document.getElementById('container-all-projects');
+    const arrow = document.getElementById('all-projects-arrow');
+    el.classList.toggle('open');
+    arrow.style.transform = el.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0deg)';
 };
 
 window.signIn = () => {
-    signInWithPopup(auth, provider)
-        .then((result) => {
-            const credential = GoogleAuthProvider.credentialFromResult(result);
-            const token = credential.accessToken;
-            if (token) {
-                sessionStorage.setItem('google_access_token', token);
-            }
-        })
-        .catch(e => { 
-            document.getElementById('login-error').innerText = e.message; 
-            document.getElementById('login-error').classList.remove('hidden'); 
-        });
+    signInWithPopup(auth, provider).then((result) => {
+        const token = GoogleAuthProvider.credentialFromResult(result).accessToken;
+        if (token) sessionStorage.setItem('google_access_token', token);
+    }).catch(e => { document.getElementById('login-error').innerText = e.message; document.getElementById('login-error').classList.remove('hidden'); });
 };
+window.logout = () => { sessionStorage.removeItem('google_access_token'); signOut(auth); };
 
-window.logout = () => {
-    sessionStorage.removeItem('google_access_token');
-    signOut(auth);
-};
-
-// --- NAVIGATION & TABS ---
 window.showDashboard = () => { hideAllViews(); document.getElementById('view-dashboard').classList.remove('hidden'); loadDashboard(); };
 window.showArchived = () => { hideAllViews(); document.getElementById('view-archived').classList.remove('hidden'); loadArchived(); };
-
 window.switchTab = (tabId) => {
     ['tab-ai', 'tab-review', 'tab-chat'].forEach(t => document.getElementById(t).classList.add('hidden'));
     ['btn-tab-ai', 'btn-tab-review', 'btn-tab-chat'].forEach(b => document.getElementById(b).classList.remove('active'));
@@ -174,14 +122,12 @@ window.switchTab = (tabId) => {
     document.getElementById('btn-' + tabId).classList.add('active');
 };
 
-// --- FILE HANDLING ---
+// --- FILE HANDLING & WIZARD ---
 window.handleFilePreview = (input) => {
     if(input.files && input.files[0]) {
         fileToUpload = input.files[0];
         document.getElementById('file-preview-name').innerText = fileToUpload.name;
-        if(fileToUpload.size > 5 * 1024 * 1024) {
-            document.getElementById('file-preview-name').innerText += " (Processing...)";
-        }
+        if(fileToUpload.size > 5 * 1024 * 1024) document.getElementById('file-preview-name').innerText += " (Processing...)";
         const reader = new FileReader();
         reader.onload = (e) => {
             fileBase64 = e.target.result;
@@ -196,11 +142,16 @@ window.startUpload = (revisionMode = false) => {
     hideAllViews();
     document.getElementById('view-wizard').classList.remove('hidden');
     
+    // RESET STATE
     fileToUpload = null;
     fileBase64 = null;
     document.getElementById('file-upload').value = '';
     document.getElementById('file-preview-name').innerText = "Click to upload document or video";
-    
+    document.getElementById('upload-status').classList.add('hidden'); // Fix #7
+    document.getElementById('btn-submit-project').disabled = false;
+    document.getElementById('input-deadline-final').value = ''; // Fix #2
+    document.getElementById('input-deadline-next').value = '';  // Fix #2
+
     const t = document.getElementById('input-title');
     if(isRevisionMode && currentProject) {
         document.getElementById('wizard-title').innerText = "Upload Revision";
@@ -225,7 +176,7 @@ window.submitProject = async () => {
     const statusMsg = document.getElementById('upload-status');
 
     if(!fileToUpload) return alert("Please upload a file first.");
-    if(!fileBase64) return alert("File is still processing. Please wait a moment.");
+    if(!fileBase64) return alert("File is still processing.");
 
     btn.disabled = true;
     statusMsg.classList.remove('hidden');
@@ -238,14 +189,12 @@ window.submitProject = async () => {
         const isVideo = mimeType.startsWith('video/');
         const isBinary = isImage || isPdf || isVideo;
 
-        // 1. Upload to Firebase Storage FIRST
         const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
         await uploadString(storageRef, fileBase64, 'data_url');
         const url = await getDownloadURL(storageRef);
 
         statusMsg.innerText = "Processing... Analyzing with AI...";
 
-        // 2. Prepare Payload (Send URL instead of Content)
         const payload = {
             mode: 'analyze',
             fileUrl: url,
@@ -256,7 +205,8 @@ window.submitProject = async () => {
             priority: document.getElementById('input-priority').value
         };
 
-        if(isRevisionMode && currentProject.aiSuggestions) {
+        // FIX #8: Robust Verify Logic
+        if(isRevisionMode && currentProject.aiSuggestions && currentProject.aiSuggestions.length > 0) {
             const accepted = currentProject.aiSuggestions.filter(s => s.status === 'accepted');
             if(accepted.length > 0) {
                 payload.mode = 'verify';
@@ -264,10 +214,10 @@ window.submitProject = async () => {
             }
         }
 
-        // 3. Call AI Function (With Timeout)
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 45000); // Increased timeout
 
+        let suggestions = [];
         try {
             const res = await fetch('/.netlify/functions/proof-read', { 
                 method: 'POST', 
@@ -276,8 +226,9 @@ window.submitProject = async () => {
             });
             clearTimeout(timeoutId);
             
-            if(!res.ok) throw new Error("AI Analysis Failed. Verify file format.");
-            let suggestions = await res.json();
+            if(!res.ok) throw new Error("AI Analysis Failed.");
+            const data = await res.json();
+            suggestions = Array.isArray(data) ? data : [];
             
             if(payload.mode === 'verify') {
                 suggestions = suggestions.map((r, i) => ({
@@ -288,50 +239,47 @@ window.submitProject = async () => {
             } else {
                 suggestions = suggestions.map(s => ({...s, status: 'pending'}));
             }
+        } catch(fetchError) {
+             console.warn("AI Analysis skipped or failed", fetchError);
+             // Allow upload to continue even if AI fails
+        }
 
-            // 4. Save to Firestore
-            const commonData = {
-                fileURL: url,
-                storagePath: storageRef.fullPath,
-                fileMime: mimeType,
-                aiSuggestions: suggestions,
-                priority: document.getElementById('input-priority').value,
-                deadlineFinal: document.getElementById('input-deadline-final').value,
-                deadlineNext: document.getElementById('input-deadline-next').value
-            };
+        const commonData = {
+            fileURL: url,
+            storagePath: storageRef.fullPath,
+            fileMime: mimeType,
+            aiSuggestions: suggestions,
+            priority: document.getElementById('input-priority').value,
+            deadlineFinal: document.getElementById('input-deadline-final').value,
+            deadlineNext: document.getElementById('input-deadline-next').value
+        };
 
-            if(isRevisionMode) {
-                const newCount = (currentProject.revisionCount || 0) + 1;
-                await updateDoc(doc(db, "projects", currentProject.id), { 
-                    ...commonData, 
-                    status: 'Needs Review', 
-                    managerComments: '', 
-                    isRevision: true,
-                    revisionCount: newCount 
-                });
-                window.loadProject(currentProject.id);
-            } else {
-                const docRef = await addDoc(collection(db, "projects"), {
-                    title: title,
-                    mediaType: payload.mediaType,
-                    status: 'Draft',
-                    revisionCount: 0,
-                    creatorId: currentUser.uid,
-                    creatorName: currentUser.displayName,
-                    creatorEmail: currentUser.email,
-                    creatorPhoto: currentUser.photoURL,
-                    createdAt: serverTimestamp(),
-                    reviewerId: null,
-                    ...commonData
-                });
-                window.loadProject(docRef.id);
-            }
-
-        } catch (fetchError) {
-            if (fetchError.name === 'AbortError') {
-                throw new Error("Analysis timed out. The file might be too complex for the AI to process quickly.");
-            }
-            throw fetchError;
+        if(isRevisionMode) {
+            const newCount = (currentProject.revisionCount || 0) + 1;
+            await updateDoc(doc(db, "projects", currentProject.id), { 
+                ...commonData, 
+                status: 'Needs Review', 
+                managerComments: '', 
+                isRevision: true,
+                revisionCount: newCount 
+            });
+            if(currentProject.reviewerEmail) sendNotification(currentProject.reviewerEmail, `Revision Uploaded: ${currentProject.title}`, `New revision available.`);
+            window.loadProject(currentProject.id);
+        } else {
+            const docRef = await addDoc(collection(db, "projects"), {
+                title: title,
+                mediaType: payload.mediaType,
+                status: 'Draft',
+                revisionCount: 0,
+                creatorId: currentUser.uid,
+                creatorName: currentUser.displayName,
+                creatorEmail: currentUser.email,
+                creatorPhoto: currentUser.photoURL,
+                createdAt: serverTimestamp(),
+                reviewerId: null,
+                ...commonData
+            });
+            window.loadProject(docRef.id);
         }
 
     } catch(e) {
@@ -342,36 +290,19 @@ window.submitProject = async () => {
     }
 };
 
-// --- EMAIL NOTIFICATION HELPER ---
 async function sendNotification(email, subject, html) {
     try {
-        await fetch('/.netlify/functions/send-email', {
-            method: 'POST',
-            body: JSON.stringify({ to: email, subject, html })
-        });
-    } catch(e) {
-        console.error("Failed to send email notification", e);
-    }
+        await fetch('/.netlify/functions/send-email', { method: 'POST', body: JSON.stringify({ to: email, subject, html }) });
+    } catch(e) { console.error("Email failed", e); }
 }
 
-// --- AUTH LISTENER ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
         onSnapshot(doc(db, "users", user.uid), (docSnap) => {
-            if (docSnap.exists()) {
-                currentUserData = docSnap.data();
-                loadDashboard(); 
-            }
+            if (docSnap.exists()) { currentUserData = docSnap.data(); loadDashboard(); }
         });
-        await setDoc(doc(db, "users", user.uid), {
-            uid: user.uid,
-            displayName: user.displayName,
-            email: user.email,
-            photoURL: user.photoURL,
-            lastSeen: serverTimestamp()
-        }, { merge: true });
-
+        await setDoc(doc(db, "users", user.uid), { uid: user.uid, displayName: user.displayName, email: user.email, photoURL: user.photoURL, lastSeen: serverTimestamp() }, { merge: true });
         document.getElementById('view-login').classList.add('hidden');
         document.getElementById('view-app').classList.remove('hidden');
         document.getElementById('user-name').innerText = user.displayName;
@@ -390,18 +321,21 @@ async function loadDashboard() {
     const firstDay = new Date(today.setDate(today.getDate() - today.getDay() + 1));
     const lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 7));
     
-    // FETCH TEAM PROJECTS (All projects not archived)
+    // FETCH ALL PROJECTS
     onSnapshot(query(collection(db, "projects")), (snapshot) => {
-        const container = document.getElementById('list-team-projects');
-        container.innerHTML = '';
-        const docs = [];
+        const containerAll = document.getElementById('list-all-projects');
+        const containerMy = document.getElementById('list-my-projects');
+        containerAll.innerHTML = '';
+        containerMy.innerHTML = '';
+        
+        const allDocs = [];
         let activeCount = 0;
         let dueThisWeek = 0;
 
         snapshot.forEach(doc => {
             const d = doc.data();
             if(d.status !== 'Archived') {
-                docs.push({ id: doc.id, ...d });
+                allDocs.push({ id: doc.id, ...d });
                 activeCount++;
                 if(d.deadlineFinal) {
                     const due = new Date(d.deadlineFinal);
@@ -412,15 +346,18 @@ async function loadDashboard() {
         
         document.getElementById('stat-total').innerText = activeCount;
         document.getElementById('stat-due').innerText = dueThisWeek;
-        docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        allDocs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         
-        if(docs.length === 0) container.innerHTML = '<div class="p-8 text-center text-slate-400">No active projects.</div>';
-        docs.forEach(data => renderTeamRow(data, data.id, container));
+        // RENDER ALL
+        if(allDocs.length === 0) containerAll.innerHTML = '<div class="p-4 text-center text-slate-400">No active projects.</div>';
+        allDocs.forEach(data => renderTeamRow(data, data.id, containerAll, false));
 
-        // --- TRIGGER TASK SYNC (Creator Actions) ---
-        // We scan all projects to see if we (as creator) need to do something
-        const myProjects = docs.filter(d => d.creatorId === currentUser.uid);
-        syncProjectTasks(myProjects);
+        // RENDER MY PROJECTS (Created by me)
+        const myDocs = allDocs.filter(d => d.creatorId === currentUser.uid);
+        if(myDocs.length === 0) containerMy.innerHTML = '<div class="p-8 text-center text-slate-400">No projects created.</div>';
+        myDocs.forEach(data => renderTeamRow(data, data.id, containerMy, true));
+
+        syncProjectTasks(myDocs);
     });
 
     // FETCH ASSIGNED TO ME
@@ -441,41 +378,30 @@ async function loadDashboard() {
             badge.innerText = docs.length;
             docs.forEach(data => renderCard(data, data.id, container));
         }
-
-        // --- TRIGGER TASK SYNC (Reviewer Actions) ---
         syncProjectTasks(docs);
     });
 }
 
-function renderTeamRow(data, id, container, isArchived = false) {
+function renderTeamRow(data, id, container, isMyProjectView) {
     const div = document.createElement('div');
     div.className = "grid grid-cols-12 px-5 py-4 border-b border-slate-100 hover:bg-slate-50 items-center transition group cursor-pointer relative";
     
-    let statusColor = "bg-slate-100 text-slate-600";
-    if (data.status === 'Needs Review') statusColor = "bg-blue-100 text-blue-700";
-    if (data.status === 'Changes Requested') statusColor = "bg-red-100 text-red-700";
-    if (data.status === 'Approved') statusColor = "bg-emerald-100 text-emerald-700";
+    // PILL STATUS
+    const statusPill = getStatusPill(data.status);
     
     let revisionText = data.revisionCount > 0 ? `${data.revisionCount} Revision` : "Original";
-    if(data.revisionCount === 1) revisionText = "1st Revision";
-    else if(data.revisionCount === 2) revisionText = "2nd Revision";
-
     let priorityBadge = data.priority === "Urgent" ? `<span class="text-red-600 font-bold text-xs uppercase">🔥 Urgent</span>` : 
                         data.priority === "High" ? `<span class="text-orange-500 font-bold text-xs">High</span>` : 
                         `<span class="text-slate-400 text-xs">Normal</span>`;
 
     const nextDate = data.deadlineNext ? new Date(data.deadlineNext).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
-    
-    const canDelete = data.creatorId === currentUser.uid || data.reviewerId === currentUser.uid;
-    const deleteBtn = canDelete ? 
+    const deleteBtn = (data.creatorId === currentUser.uid || data.reviewerId === currentUser.uid) ? 
         `<button onclick="deleteProject('${id}', '${data.storagePath || ''}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition z-10 relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` : `<div class="w-8"></div>`;
 
-    // Chat Notification
-    let showChatBadge = false;
-    if (currentUserData && data.lastChatAt) {
-        const lastView = currentUserData.projectViews && currentUserData.projectViews[id] ? currentUserData.projectViews[id].seconds : 0;
-        const lastChat = data.lastChatAt.seconds;
-        if (lastChat > lastView) showChatBadge = true;
+    // NOTIFICATIONS (Fix #6)
+    let notifyDot = '';
+    if(isMyProjectView && data.status === 'Changes Requested') {
+        notifyDot = `<span class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white"></span>`;
     }
 
     div.onclick = () => window.loadProject(id);
@@ -483,22 +409,18 @@ function renderTeamRow(data, id, container, isArchived = false) {
     div.innerHTML = `
         <div class="col-span-1 text-center" onclick="event.stopPropagation()">${deleteBtn}</div>
         <div class="col-span-4 relative">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 relative inline-block">
                 <div class="font-bold text-slate-700 text-sm truncate pr-2">${data.title}</div>
-                ${showChatBadge ? `<div class="bg-blue-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold animate-pulse">New Msg</div>` : ''}
+                ${notifyDot}
             </div>
             <div class="text-[10px] text-slate-400 mt-0.5 font-bold uppercase tracking-wide">${data.mediaType} • ${revisionText}</div>
         </div>
-        <div class="col-span-2">
-            <span class="${statusColor} text-[10px] font-bold px-2 py-1 rounded uppercase border border-current opacity-80">${data.status}</span>
-        </div>
+        <div class="col-span-2">${statusPill}</div>
         <div class="col-span-2">${priorityBadge}</div>
         <div class="col-span-1 flex items-center gap-2">
             <img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full border border-white shadow-sm" title="${data.creatorName}">
         </div>
-        <div class="col-span-2 text-right text-xs text-slate-500 font-medium">
-            ${data.deadlineNext ? `Due: ${nextDate}` : ''}
-        </div>
+        <div class="col-span-2 text-right text-xs text-slate-500 font-medium">${data.deadlineNext ? `Due: ${nextDate}` : ''}</div>
     `;
     container.appendChild(div);
 }
@@ -510,22 +432,9 @@ function renderCard(data, id, container) {
     
     let badge = data.priority === "Urgent" ? `<span class="bg-red-500/20 text-red-300 text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-red-500/30">Urgent 🔥</span>` : "";
     
-    let showChatBadge = false;
-    if (currentUserData && data.lastChatAt) {
-        const lastView = currentUserData.projectViews && currentUserData.projectViews[id] ? currentUserData.projectViews[id].seconds : 0;
-        const lastChat = data.lastChatAt.seconds;
-        if (lastChat > lastView) showChatBadge = true;
-    }
-
-    const chatIndicator = showChatBadge ? 
-        `<div class="flex items-center gap-1 bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full chat-badge ml-2 shadow-lg z-10">New Message</div>` : '';
-
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
-            <div class="flex items-center gap-2">
-                ${badge}
-                ${chatIndicator}
-            </div>
+            <div class="flex items-center gap-2">${badge}</div>
             <span class="text-emerald-400 font-bold text-[10px] uppercase ml-2">${data.status}</span>
         </div>
         <h4 class="font-bold text-sm mb-3 text-white truncate">${data.title}</h4>
@@ -537,17 +446,12 @@ function renderCard(data, id, container) {
     container.appendChild(div);
 }
 
-// --- PROJECT VIEW ---
 window.loadProject = async (id) => {
     hideAllViews();
     if(chatUnsubscribe) { chatUnsubscribe(); chatUnsubscribe = null; }
     document.getElementById('view-project').classList.remove('hidden');
     
-    if (currentUser) {
-        setDoc(doc(db, "users", currentUser.uid), {
-            projectViews: { [id]: serverTimestamp() }
-        }, { merge: true });
-    }
+    if (currentUser) setDoc(doc(db, "users", currentUser.uid), { projectViews: { [id]: serverTimestamp() } }, { merge: true });
 
     onSnapshot(doc(db, "projects", id), (snap) => {
         if(snap.exists()) {
@@ -599,10 +503,7 @@ function renderProjectView() {
         } else if(p.fileMime === 'application/pdf') {
             docContainer.innerHTML = `<iframe src="${p.fileURL}" class="w-full h-full border-0 rounded"></iframe>`;
         } else if(p.fileMime.startsWith('video/')) {
-            docContainer.innerHTML = `
-                <div class="bg-black rounded-xl overflow-hidden shadow-lg w-full flex justify-center">
-                    <video controls src="${p.fileURL}" class="max-h-[600px] max-w-full"></video>
-                </div>`;
+            docContainer.innerHTML = `<div class="bg-black rounded-xl overflow-hidden shadow-lg w-full flex justify-center"><video controls src="${p.fileURL}" class="max-h-[600px] max-w-full"></video></div>`;
         } else {
             docContainer.innerHTML = `<div class="p-8 text-center"><a href="${p.fileURL}" target="_blank" class="text-blue-500 underline">Download File</a></div>`;
         }
@@ -610,35 +511,62 @@ function renderProjectView() {
 
     const isReviewer = p.reviewerId === currentUser.uid;
     const canEdit = (p.creatorId === currentUser.uid || isReviewer) && p.status !== 'Approved' && p.status !== 'Archived';
+    const isCreator = p.creatorId === currentUser.uid;
 
     const aiList = document.getElementById('ai-feedback-list');
     aiList.innerHTML = '';
     if(!p.aiSuggestions || p.aiSuggestions.length === 0) aiList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No AI suggestions found.</div>';
+    
     (p.aiSuggestions || []).forEach((s, idx) => {
-        let statusClass = s.status === 'accepted' ? 'status-accepted' : s.status === 'rejected' ? 'status-rejected' : 'status-pending';
-        let btns = '';
-        if(canEdit) {
-            btns = `<div class="flex gap-2 mt-3 pt-3 border-t border-slate-100">
-                <button onclick="updateSuggestion(${idx}, 'accepted')" class="flex-1 text-emerald-600 hover:bg-emerald-50 py-1.5 rounded text-xs font-bold transition">Accept ✔️</button>
-                <button onclick="updateSuggestion(${idx}, 'rejected')" class="flex-1 text-red-500 hover:bg-red-50 py-1.5 rounded text-xs font-bold transition">Reject ❌</button>
-            </div>`;
-        }
+        const isRejected = s.status === 'rejected';
+        const accentColor = isRejected ? 'bg-red-400' : 'bg-emerald-500';
+        const badgeColor = isRejected ? 'text-red-600 bg-red-50' : 'text-emerald-600 bg-emerald-50';
+        const badgeText = s.status === 'pending' ? 'Suggestion' : s.status;
+
+        const actionButtons = canEdit && s.status === 'pending' ? `
+            <div class="mt-4 flex gap-2">
+                <button onclick="updateSuggestion(${idx}, 'accepted')" class="flex-1 bg-slate-900 text-white py-2 rounded-lg text-xs font-bold hover:bg-black transition shadow-md shadow-slate-200">Accept</button>
+                <button onclick="updateSuggestion(${idx}, 'rejected')" class="px-3 py-2 border border-slate-200 rounded-lg text-slate-400 hover:text-red-500 hover:border-red-200 transition">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
+        ` : '';
+
         aiList.innerHTML += `
-            <div class="suggestion-card p-5 mb-4 ${statusClass}">
-                <div class="flex justify-between items-start mb-2"><span class="text-sm font-bold text-slate-800 leading-tight">${s.reason}</span>${s.status !== 'pending' ? `<span class="text-[10px] font-bold uppercase ml-2 ${s.status === 'accepted' ? 'text-emerald-600' : 'text-red-500'}">${s.status}</span>` : ''}</div>
-                <div class="diff-block"><div class="diff-old">${s.original}</div><div class="text-center text-slate-300 text-xs">↓</div><div class="diff-new">${s.fix}</div></div>
-                ${btns}
-            </div>`;
+        <div class="bg-white rounded-xl shadow-md border border-slate-100 overflow-hidden flex transition hover:shadow-lg mb-4">
+            <div class="w-2 ${accentColor} shrink-0"></div>
+            <div class="flex-1 p-5">
+                <div class="flex justify-between items-start mb-3">
+                    <span class="text-[10px] font-bold uppercase tracking-wider ${badgeColor} px-2 py-1 rounded-md">
+                        ${badgeText}
+                    </span>
+                </div>
+                <p class="text-slate-600 text-sm leading-snug mb-4">${s.reason}</p>
+                <div class="space-y-1">
+                    <div class="text-xs text-slate-400 line-through decoration-red-300 decoration-2 px-3 py-1">${s.original}</div>
+                    <div class="bg-emerald-50 text-emerald-900 text-sm font-bold px-3 py-3 rounded-lg border-l-2 border-emerald-500 shadow-sm">${s.fix}</div>
+                </div>
+                ${actionButtons}
+            </div>
+        </div>`;
     });
 
+    // MANUAL NOTES (With Checkbox Fix #5)
     const manualList = document.getElementById('manual-feedback-list');
     manualList.innerHTML = '';
     if(!p.reviewerSuggestions || p.reviewerSuggestions.length === 0) manualList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No reviewer notes yet.</div>';
-    (p.reviewerSuggestions || []).forEach((s) => {
+    (p.reviewerSuggestions || []).forEach((s, idx) => {
+        const isChecked = s.acknowledged ? 'checked' : '';
+        const opacity = s.acknowledged ? 'opacity-50' : 'opacity-100';
+        const checkbox = isCreator ? `<input type="checkbox" ${isChecked} onclick="toggleManualNote(${idx})" class="w-5 h-5 text-blue-600 rounded cursor-pointer mr-3">` : '';
+
         manualList.innerHTML += `
-            <div class="suggestion-card p-5 mb-4 status-manual">
-                <div class="flex justify-between items-start mb-2"><span class="text-sm font-bold text-slate-800 leading-tight">${s.reason}</span><span class="text-[10px] font-bold text-blue-500 uppercase ml-2">Note</span></div>
-                <div class="diff-block">${s.original ? `<div class="diff-old">${s.original}</div>` : ''}${s.fix ? `<div class="diff-new">${s.fix}</div>` : ''}</div>
+            <div class="suggestion-card p-5 mb-4 status-manual flex items-start ${opacity} transition">
+                ${checkbox}
+                <div class="flex-1">
+                    <div class="flex justify-between items-start mb-2"><span class="text-sm font-bold text-slate-800 leading-tight">${s.reason}</span><span class="text-[10px] font-bold text-blue-500 uppercase ml-2">Note</span></div>
+                    <div class="diff-block">${s.original ? `<div class="diff-old">${s.original}</div>` : ''}${s.fix ? `<div class="diff-new">${s.fix}</div>` : ''}</div>
+                </div>
             </div>`;
     });
 
@@ -662,11 +590,18 @@ function renderProjectView() {
     }
 }
 
-// --- INTERACTIONS (Global) ---
 window.updateSuggestion = async (i, s) => {
     const newS = [...currentProject.aiSuggestions];
     newS[i].status = s;
     await updateDoc(doc(db, "projects", currentProject.id), { aiSuggestions: newS });
+};
+
+// Toggle Checkbox for Manual Notes
+window.toggleManualNote = async (idx) => {
+    if(!currentProject) return;
+    const notes = [...currentProject.reviewerSuggestions];
+    notes[idx].acknowledged = !notes[idx].acknowledged;
+    await updateDoc(doc(db, "projects", currentProject.id), { reviewerSuggestions: notes });
 };
 
 window.addManualSuggestion = async () => {
@@ -675,7 +610,7 @@ window.addManualSuggestion = async () => {
     const fix = document.getElementById('manual-fix').value;
     if(!reason) return alert("Please enter a summary or reason.");
     try {
-        const newNote = { reason, original, fix, createdAt: Date.now(), creatorId: currentUser.uid };
+        const newNote = { reason, original, fix, createdAt: Date.now(), creatorId: currentUser.uid, acknowledged: false };
         await updateDoc(doc(db, "projects", currentProject.id), { reviewerSuggestions: arrayUnion(newNote) });
         document.getElementById('manual-reason').value = '';
         document.getElementById('manual-original').value = '';
@@ -696,10 +631,7 @@ window.sendChatMessage = async (e) => {
             createdAt: serverTimestamp()
         });
         await updateDoc(doc(db, "projects", currentProject.id), { lastChatAt: serverTimestamp() });
-        // Mark as read for self
-        await setDoc(doc(db, "users", currentUser.uid), {
-            projectViews: { [currentProject.id]: serverTimestamp() }
-        }, { merge: true });
+        await setDoc(doc(db, "users", currentUser.uid), { projectViews: { [currentProject.id]: serverTimestamp() } }, { merge: true });
         input.value = '';
     } catch(err) { console.error("Chat error:", err); }
 };
@@ -719,7 +651,7 @@ window.openAssignModal = async () => {
             if(confirm(`Assign ${u.displayName}?`)) {
                 await updateDoc(doc(db, "projects", currentProject.id), { reviewerId: u.uid, reviewerName: u.displayName, status: 'Needs Review' });
                 if (u.email) sendNotification(u.email, `New Assignment: ${currentProject.title}`, `<p>You have been assigned to review <b>${currentProject.title}</b>.</p><p>Please log in to Proof Buddy to view it.</p>`);
-                window.closeModal('modal-assign');
+                window.closeModal('modal-assign'); // Fix #1
             }
         };
         div.innerHTML = `<img src="${u.photoURL}" class="w-12 h-12 rounded-full mb-2 shadow-sm"><span class="text-xs font-bold text-slate-700">${u.displayName.split(' ')[0]}</span>`;
