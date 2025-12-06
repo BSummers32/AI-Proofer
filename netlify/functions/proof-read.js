@@ -21,8 +21,7 @@ exports.handler = async (event, context) => {
     const payload = JSON.parse(event.body);
     const { 
       mode = "analyze", 
-      content,      // Deprecated in favor of fileUrl for large files
-      fileUrl,      // NEW: URL to fetch content from
+      fileUrl,      
       mediaType, 
       mimeType, 
       isBinary, 
@@ -57,6 +56,7 @@ exports.handler = async (event, context) => {
       const videoInstruction = mimeType.startsWith("video/") ? 
         "This is a video file. Analyze the visual text (titles, chyrons, signage) AND the spoken audio transcript for errors. Treat spoken words as the 'content'." : "";
 
+      // FIX #9: Grouping Instruction Added
       systemPrompt = `
         You are a professional content editor for ${mediaType}. ${toneInstruction}
         ${videoInstruction}
@@ -65,23 +65,25 @@ exports.handler = async (event, context) => {
         - Target Audience: ${targetAudience}
         - Custom Style Guide: ${styleGuide}
         
-        Return ONLY a raw JSON array of objects.
+        INSTRUCTIONS:
+        1. Identify grammatical errors, tone inconsistencies, and clarity issues.
+        2. CRITICAL: Group repetitive errors into a single suggestion. For example, if there are 5 capitalization errors in a list, DO NOT list them individually. Instead, provide ONE suggestion like "Capitalize all list items" and show one example in the 'original' field.
+        3. Return ONLY a raw JSON array of objects.
+        
         Each object must have:
         - "id": A unique number
-        - "original": The exact text (or visual text) to change
-        - "fix": The suggested replacement
-        - "reason": A brief explanation
+        - "original": The exact text snippet (or a representative example if grouping)
+        - "fix": The suggested replacement (or a summary of the fix if grouping)
+        - "reason": A brief explanation of the error or improvement
         - "confidence": "High", "Medium", or "Low"
       `;
     }
 
     let parts = [{ text: systemPrompt }];
 
-    // Handle Content (Direct or URL)
-    let finalData = content;
-    
-    // If we have a URL but no direct content, fetch it
-    if (!finalData && fileUrl) {
+    // Handle Content (URL)
+    let finalData = null;
+    if (fileUrl) {
       console.log(`Fetching content from: ${fileUrl}`);
       const fileResp = await fetch(fileUrl);
       if (!fileResp.ok) throw new Error("Failed to fetch file from storage URL");
@@ -92,9 +94,12 @@ exports.handler = async (event, context) => {
     if (isBinary && finalData) {
       parts.push({ inlineData: { mimeType: mimeType, data: finalData } });
     } else if (finalData) {
-      parts.push({ text: `Document content:\n"${finalData}"` });
+      // Decode base64 to text if it's not binary (unlikely in this flow but good safety)
+      // Actually for text files we might need to decode, but Gemini handles text in inlineData too for some mimeTypes.
+      // Safest is to treat everything as inlineData if we have base64
+      parts.push({ inlineData: { mimeType: mimeType, data: finalData } });
     } else {
-      throw new Error("No content provided (either 'content' or 'fileUrl' is required)");
+      throw new Error("No content provided (fileUrl required)");
     }
 
     const result = await model.generateContent(parts);
