@@ -38,25 +38,21 @@ const TaskService = {
     },
 
     async ensureTaskList(token) {
-        // 1. Check if we already have the list ID stored
         let listId = localStorage.getItem('pb_task_list_id');
         if (listId) return listId;
 
-        // 2. Fetch lists from Google
         try {
             const res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             const data = await res.json();
             
-            // 3. Look for "Proof Buddy"
             const existing = data.items.find(l => l.title === 'Proof Buddy');
             if (existing) {
                 localStorage.setItem('pb_task_list_id', existing.id);
                 return existing.id;
             }
 
-            // 4. Create if missing
             const createRes = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists', {
                 method: 'POST',
                 headers: { 
@@ -77,19 +73,15 @@ const TaskService = {
 
     async createTask(title, dueDateStr) {
         const token = await this.getAccessToken();
-        if (!token) return; // User might need to re-login to sync
+        if (!token) return;
 
         const listId = await this.ensureTaskList(token);
         if (!listId) return;
 
         const payload = { title: title };
-        
-        // Format Date for Google Tasks (RFC 3339)
         if (dueDateStr) {
-            // Append T09:00:00Z to make it a morning deadline, or just use date
-            // Google Tasks 'due' needs strict RFC 3339 timestamp format
             const date = new Date(dueDateStr);
-            date.setHours(9, 0, 0, 0); // Set to 9 AM
+            date.setHours(9, 0, 0, 0); 
             payload.due = date.toISOString();
         }
 
@@ -113,15 +105,9 @@ const TaskService = {
 async function syncProjectTasks(projects) {
     if (!currentUser) return;
     
-    // We use a subcollection in the User profile to track which tasks we've already created
-    // This prevents creating duplicate tasks every time the dashboard loads.
-    // Structure: users/{uid}/taskTracking/{projectId} -> { lastStatus: 'Needs Review' }
-    
     for (const p of projects) {
         let actionNeeded = null;
-        let taskSuffix = "";
 
-        // 1. Determine if a Task is needed based on User Role & Status
         const isReviewer = p.reviewerId === currentUser.uid;
         const isCreator = p.creatorId === currentUser.uid;
 
@@ -134,23 +120,17 @@ async function syncProjectTasks(projects) {
         } else if (isCreator && p.status === 'Changes Requested') {
             actionNeeded = 'Has comments';
         } else if (isCreator && p.status === 'Approved') {
-            actionNeeded = 'Approved'; // Optional: Notify creator of approval
+            actionNeeded = 'Approved';
         }
 
-        // 2. If action needed, check if we already created this specific task
         if (actionNeeded) {
             const trackRef = doc(db, "users", currentUser.uid, "taskTracking", p.id);
             const trackSnap = await getDoc(trackRef);
             const trackData = trackSnap.data();
 
-            // Only create if we haven't tracked this status yet
             if (!trackData || trackData.lastStatus !== p.status) {
                 const taskTitle = `${p.title} - ${actionNeeded}`;
-                
-                // Use 'deadlineNext' for the due date
                 await TaskService.createTask(taskTitle, p.deadlineNext);
-
-                // Update tracking so we don't do it again
                 await setDoc(trackRef, { lastStatus: p.status, updatedAt: serverTimestamp() });
             }
         }
@@ -166,7 +146,6 @@ window.toggleSidebar = () => {
 window.signIn = () => {
     signInWithPopup(auth, provider)
         .then((result) => {
-            // Google Access Token for Tasks API
             const credential = GoogleAuthProvider.credentialFromResult(result);
             const token = credential.accessToken;
             if (token) {
@@ -250,18 +229,26 @@ window.submitProject = async () => {
 
     btn.disabled = true;
     statusMsg.classList.remove('hidden');
+    statusMsg.innerText = "Processing... Uploading File...";
 
     try {
-        const contentRaw = fileBase64.split(',')[1];
         const mimeType = fileToUpload.type;
         const isImage = mimeType.startsWith('image/');
         const isPdf = mimeType === 'application/pdf';
         const isVideo = mimeType.startsWith('video/');
         const isBinary = isImage || isPdf || isVideo;
 
+        // 1. Upload to Firebase Storage FIRST
+        const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
+        await uploadString(storageRef, fileBase64, 'data_url');
+        const url = await getDownloadURL(storageRef);
+
+        statusMsg.innerText = "Processing... Analyzing with AI...";
+
+        // 2. Prepare Payload (Send URL instead of Content)
         const payload = {
             mode: 'analyze',
-            content: contentRaw,
+            fileUrl: url, // <-- Changed: Sending URL
             mediaType: isRevisionMode ? currentProject.mediaType : document.getElementById('input-type').value,
             mimeType: mimeType,
             isBinary: isBinary,
@@ -277,12 +264,13 @@ window.submitProject = async () => {
             }
         }
 
+        // 3. Call AI Function
         const res = await fetch('/.netlify/functions/proof-read', { 
             method: 'POST', 
             body: JSON.stringify(payload) 
         });
         
-        if(!res.ok) throw new Error("AI Analysis Failed. File might be too large for free tier.");
+        if(!res.ok) throw new Error("AI Analysis Failed. Verify file format.");
         let suggestions = await res.json();
         
         if(payload.mode === 'verify') {
@@ -295,10 +283,7 @@ window.submitProject = async () => {
             suggestions = suggestions.map(s => ({...s, status: 'pending'}));
         }
 
-        const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
-        await uploadString(storageRef, fileBase64, 'data_url');
-        const url = await getDownloadURL(storageRef);
-
+        // 4. Save to Firestore
         const commonData = {
             fileURL: url,
             storagePath: storageRef.fullPath,
