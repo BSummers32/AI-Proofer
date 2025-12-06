@@ -21,7 +21,8 @@ exports.handler = async (event, context) => {
     const payload = JSON.parse(event.body);
     const { 
       mode = "analyze", 
-      content, 
+      content,      // Deprecated in favor of fileUrl for large files
+      fileUrl,      // NEW: URL to fetch content from
       mediaType, 
       mimeType, 
       isBinary, 
@@ -31,7 +32,6 @@ exports.handler = async (event, context) => {
     } = payload;
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    // Use gemini-1.5-flash for video support (or 2.5-flash if available in preview)
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
     
     let systemPrompt = "";
@@ -77,10 +77,24 @@ exports.handler = async (event, context) => {
 
     let parts = [{ text: systemPrompt }];
 
-    if (isBinary) {
-      parts.push({ inlineData: { mimeType: mimeType, data: content } });
+    // Handle Content (Direct or URL)
+    let finalData = content;
+    
+    // If we have a URL but no direct content, fetch it
+    if (!finalData && fileUrl) {
+      console.log(`Fetching content from: ${fileUrl}`);
+      const fileResp = await fetch(fileUrl);
+      if (!fileResp.ok) throw new Error("Failed to fetch file from storage URL");
+      const arrayBuffer = await fileResp.arrayBuffer();
+      finalData = Buffer.from(arrayBuffer).toString("base64");
+    }
+
+    if (isBinary && finalData) {
+      parts.push({ inlineData: { mimeType: mimeType, data: finalData } });
+    } else if (finalData) {
+      parts.push({ text: `Document content:\n"${finalData}"` });
     } else {
-      parts.push({ text: `Document content:\n"${content}"` });
+      throw new Error("No content provided (either 'content' or 'fileUrl' is required)");
     }
 
     const result = await model.generateContent(parts);
