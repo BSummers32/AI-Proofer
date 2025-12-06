@@ -248,7 +248,7 @@ window.submitProject = async () => {
         // 2. Prepare Payload (Send URL instead of Content)
         const payload = {
             mode: 'analyze',
-            fileUrl: url, // <-- Changed: Sending URL
+            fileUrl: url,
             mediaType: isRevisionMode ? currentProject.mediaType : document.getElementById('input-type').value,
             mimeType: mimeType,
             isBinary: isBinary,
@@ -264,62 +264,76 @@ window.submitProject = async () => {
             }
         }
 
-        // 3. Call AI Function
-        const res = await fetch('/.netlify/functions/proof-read', { 
-            method: 'POST', 
-            body: JSON.stringify(payload) 
-        });
-        
-        if(!res.ok) throw new Error("AI Analysis Failed. Verify file format.");
-        let suggestions = await res.json();
-        
-        if(payload.mode === 'verify') {
-            suggestions = suggestions.map((r, i) => ({
-                id: i, original: "Pending Fix", fix: r.fix, 
-                reason: r.status === 'verified' ? "✅ Verified Fix" : "❌ Fix Failed",
-                status: r.status === 'verified' ? 'accepted' : 'rejected'
-            }));
-        } else {
-            suggestions = suggestions.map(s => ({...s, status: 'pending'}));
+        // 3. Call AI Function (With Timeout)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+        try {
+            const res = await fetch('/.netlify/functions/proof-read', { 
+                method: 'POST', 
+                body: JSON.stringify(payload),
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if(!res.ok) throw new Error("AI Analysis Failed. Verify file format.");
+            let suggestions = await res.json();
+            
+            if(payload.mode === 'verify') {
+                suggestions = suggestions.map((r, i) => ({
+                    id: i, original: "Pending Fix", fix: r.fix, 
+                    reason: r.status === 'verified' ? "✅ Verified Fix" : "❌ Fix Failed",
+                    status: r.status === 'verified' ? 'accepted' : 'rejected'
+                }));
+            } else {
+                suggestions = suggestions.map(s => ({...s, status: 'pending'}));
+            }
+
+            // 4. Save to Firestore
+            const commonData = {
+                fileURL: url,
+                storagePath: storageRef.fullPath,
+                fileMime: mimeType,
+                aiSuggestions: suggestions,
+                priority: document.getElementById('input-priority').value,
+                deadlineFinal: document.getElementById('input-deadline-final').value,
+                deadlineNext: document.getElementById('input-deadline-next').value
+            };
+
+            if(isRevisionMode) {
+                const newCount = (currentProject.revisionCount || 0) + 1;
+                await updateDoc(doc(db, "projects", currentProject.id), { 
+                    ...commonData, 
+                    status: 'Needs Review', 
+                    managerComments: '', 
+                    isRevision: true,
+                    revisionCount: newCount 
+                });
+                window.loadProject(currentProject.id);
+            } else {
+                const docRef = await addDoc(collection(db, "projects"), {
+                    title: title,
+                    mediaType: payload.mediaType,
+                    status: 'Draft',
+                    revisionCount: 0,
+                    creatorId: currentUser.uid,
+                    creatorName: currentUser.displayName,
+                    creatorEmail: currentUser.email,
+                    creatorPhoto: currentUser.photoURL,
+                    createdAt: serverTimestamp(),
+                    reviewerId: null,
+                    ...commonData
+                });
+                window.loadProject(docRef.id);
+            }
+
+        } catch (fetchError) {
+            if (fetchError.name === 'AbortError') {
+                throw new Error("Analysis timed out. The file might be too complex for the AI to process quickly.");
+            }
+            throw fetchError;
         }
 
-        // 4. Save to Firestore
-        const commonData = {
-            fileURL: url,
-            storagePath: storageRef.fullPath,
-            fileMime: mimeType,
-            aiSuggestions: suggestions,
-            priority: document.getElementById('input-priority').value,
-            deadlineFinal: document.getElementById('input-deadline-final').value,
-            deadlineNext: document.getElementById('input-deadline-next').value
-        };
-
-        if(isRevisionMode) {
-            const newCount = (currentProject.revisionCount || 0) + 1;
-            await updateDoc(doc(db, "projects", currentProject.id), { 
-                ...commonData, 
-                status: 'Needs Review', 
-                managerComments: '', 
-                isRevision: true,
-                revisionCount: newCount 
-            });
-            window.loadProject(currentProject.id);
-        } else {
-            const docRef = await addDoc(collection(db, "projects"), {
-                title: title,
-                mediaType: payload.mediaType,
-                status: 'Draft',
-                revisionCount: 0,
-                creatorId: currentUser.uid,
-                creatorName: currentUser.displayName,
-                creatorEmail: currentUser.email,
-                creatorPhoto: currentUser.photoURL,
-                createdAt: serverTimestamp(),
-                reviewerId: null,
-                ...commonData
-            });
-            window.loadProject(docRef.id);
-        }
     } catch(e) {
         console.error(e);
         alert("Upload Error: " + e.message);
@@ -327,6 +341,18 @@ window.submitProject = async () => {
         statusMsg.classList.add('hidden');
     }
 };
+
+// --- EMAIL NOTIFICATION HELPER ---
+async function sendNotification(email, subject, html) {
+    try {
+        await fetch('/.netlify/functions/send-email', {
+            method: 'POST',
+            body: JSON.stringify({ to: email, subject, html })
+        });
+    } catch(e) {
+        console.error("Failed to send email notification", e);
+    }
+}
 
 // --- AUTH LISTENER ---
 onAuthStateChanged(auth, async (user) => {
