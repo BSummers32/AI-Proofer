@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, doc, getDoc, getDocs, updateDoc, setDoc, query, where, orderBy, onSnapshot, serverTimestamp, deleteDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyAc4Vm815th4dUNmIbyMz631SirvAedkFg",
@@ -26,7 +26,7 @@ let currentProject = null;
 let isRevisionMode = false;
 let chatUnsubscribe = null; 
 let fileToUpload = null;
-let fileBase64 = null;
+let fileBase64 = null; // Still needed for client-side preview
 
 // --- UTILS: SHORT STATUS PILLS ---
 const getStatusPill = (status) => {
@@ -191,7 +191,10 @@ window.submitProject = async () => {
     const statusMsg = document.getElementById('upload-status');
 
     if(!fileToUpload) return alert("Please upload a file first.");
-    if(!fileBase64) return alert("File is still processing.");
+    
+    // Safety check for base64 only if we are displaying a preview immediately, 
+    // but for upload we use fileToUpload object.
+    if(!fileBase64 && !fileToUpload) return alert("File is still processing.");
 
     btn.disabled = true;
     statusMsg.classList.remove('hidden');
@@ -205,7 +208,9 @@ window.submitProject = async () => {
         const isBinary = isImage || isPdf || isVideo;
 
         const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
-        await uploadString(storageRef, fileBase64, 'data_url');
+        
+        // FIX: Use uploadBytes for better large file handling (Videos)
+        await uploadBytes(storageRef, fileToUpload);
         const url = await getDownloadURL(storageRef);
 
         statusMsg.innerText = "Processing... Analyzing with AI...";
@@ -229,7 +234,7 @@ window.submitProject = async () => {
         }
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 45000); 
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // Extended timeout for video
 
         let suggestions = [];
         try {
@@ -442,9 +447,9 @@ function renderTeamRow(data, id, container, isMyProjectView) {
     
     const isOwner = data.creatorId === currentUser.uid;
     
-    // FIX: Delete button StopPropagation
+    // FIX: Delete button updated to avoid passing path in HTML
     const deleteBtn = isOwner ? 
-        `<button onclick="event.stopPropagation(); window.deleteProject('${id}', '${data.storagePath || ''}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition z-10 relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` : `<div class="w-8"></div>`;
+        `<button onclick="event.stopPropagation(); window.deleteProject('${id}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition z-10 relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` : `<div class="w-8"></div>`;
 
     let notifyDot = '';
     if(isMyProjectView && data.status === 'Changes Requested') {
@@ -810,11 +815,19 @@ window.finalizeProject = async () => {
     } catch(e) { alert(e.message); }
 };
 
-window.deleteProject = async (id, path) => {
+window.deleteProject = async (id) => {
+    // FIX: Updated to fetch path inside the function (safest for MP4/odd filenames)
     if(!confirm("⚠️ PERMANENT DELETE\nAre you sure you want to remove this project?")) return;
     try {
+        const docSnap = await getDoc(doc(db, "projects", id));
+        if(!docSnap.exists()) return;
+        const data = docSnap.data();
+
         await deleteDoc(doc(db, "projects", id));
-        if(path) { try { await deleteObject(ref(storage, path)); } catch(e){} }
+        
+        if(data.storagePath) { 
+            try { await deleteObject(ref(storage, data.storagePath)); } catch(e){ console.warn("Storage delete failed", e); } 
+        }
     } catch(e) { alert("Error: " + e.message); }
 };
 
