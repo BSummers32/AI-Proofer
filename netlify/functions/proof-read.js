@@ -33,6 +33,9 @@ exports.handler = async (event, context) => {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
     
+    // INJECT CURRENT DATE
+    const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
     let systemPrompt = "";
     
     if (mode === "verify") {
@@ -72,12 +75,13 @@ exports.handler = async (event, context) => {
         ${videoInstruction}
         
         CONTEXT:
+        - Current Date: ${today} (Use this to flag outdated years/dates).
         - Target Audience: ${targetAudience}
         - Custom Style Guide: ${styleGuide}
         
         INSTRUCTIONS:
         1. Identify ACTUAL errors (typos, wrong dates, misleading info).
-        2. DO NOT flag stylistic choices typical for ${mediaType} (e.g., "Sale now!!" is correct for signage, "Click here" is correct for digital).
+        2. DO NOT flag stylistic choices typical for ${mediaType}.
         3. If the text is "punchy" or uses sentence fragments for marketing effect, ACCEPT IT.
         4. CRITICAL: Group repetitive errors into a single suggestion.
         5. Return ONLY a raw JSON array of objects.
@@ -86,7 +90,7 @@ exports.handler = async (event, context) => {
         - "id": A unique number
         - "original": The exact text snippet
         - "fix": The suggested replacement
-        - "reason": A brief explanation. If rejecting a marketing choice, explain why it fails the specific goal.
+        - "reason": A brief explanation.
         - "confidence": "High", "Medium", or "Low"
       `;
     }
