@@ -39,12 +39,24 @@ exports.handler = async (event, context) => {
     let systemPrompt = "";
     
     if (mode === "verify") {
-      const editsList = expectedEdits.map(e => `- Change "${e.original}" to "${e.fix}"`).join("\n");
+      // REVISION MODE PROMPT
+      const editsList = expectedEdits.map(e => `- Originally flagged: "${e.original}" -> Fix: "${e.fix}"`).join("\n");
       systemPrompt = `
-        You are a content verification engine.
-        Verify if the following edits were implemented.
-        Expected Edits: ${editsList}
-        Return ONLY a raw JSON array of objects with keys: "fix", "status" ('verified'/'failed'), "comment".
+        You are a Document Revision Auditor.
+        This file is a REVISION of a previously analyzed document.
+        
+        YOUR GOAL: 
+        1. Verify if the "Expected Edits" below were actually made.
+        2. IGNORE the rest of the document unless you see a GLARING new error introduced by the edits.
+        3. DO NOT re-flag issues that were already ignored or present in the previous version, unless they are critical.
+        
+        Expected Edits from previous round:
+        ${editsList}
+        
+        RETURN JSON ARRAY:
+        - If fixed: { "original": "[Text from doc]", "fix": "Confimed Fix", "reason": "User applied the requested change.", "status": "verified" }
+        - If NOT fixed: { "original": "[Text from doc]", "fix": "[Expected Fix]", "reason": "User missed this edit.", "status": "failed" }
+        - If NEW critical error found: { "original": "[New Error]", "fix": "[Correction]", "reason": "New error introduced in revision.", "status": "new" }
       `;
     } else {
       let toneInstruction = "";
