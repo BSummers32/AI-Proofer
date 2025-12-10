@@ -48,31 +48,43 @@ exports.handler = async (event, context) => {
       `;
     } else {
       let toneInstruction = "";
-      // ENHANCED PROMPT LOGIC FOR MARKETING
-      switch (mediaType) {
-        case "signage": 
-          toneInstruction = "CONTEXT: PRINTED SIGNAGE. Focus on high impact and brevity. IGNORE sentence fragments and exclamation points—they are desired for effect."; 
-          break;
-        case "social": 
-          toneInstruction = "CONTEXT: SOCIAL MEDIA. Focus on engagement. Slang, emojis, exclamation points, and casual grammar are EXPECTED and should NOT be flagged."; 
-          break;
-        case "policy": 
-          toneInstruction = "CONTEXT: CORPORATE POLICY. Focus on professional, formal, and legally precise language. Strict grammar applies."; 
-          break;
-        case "digital": 
-          toneInstruction = "CONTEXT: WEB CONTENT. Focus on readability and SEO. fragments are okay for headers, but body text should be grammatical."; 
-          break;
-        default: 
-          toneInstruction = "Focus on readability and grammar.";
+      
+      // VIDEO SPECIFIC LOGIC
+      if(mimeType && mimeType.startsWith("video/")) {
+        toneInstruction = `
+            CONTEXT: VIDEO CONTENT.
+            You are a professional Video Critic and Editor.
+            Your job is to assess the Quality (Good/Bad), Pacing, Visual Clarity, and Audio.
+            
+            INSTRUCTIONS:
+            1. Analyze the spoken audio and on-screen text.
+            2. Evaluate if the video is engaging, well-paced, and has clear audio/visuals.
+            3. If the video is boring, poorly lit, or has bad audio, suggest improvements in the 'fix' field.
+            4. If the content is good, acknowledge it.
+            5. Also check for spelling/grammar in on-screen text.
+        `;
+      } else {
+        // STANDARD TEXT LOGIC
+        switch (mediaType) {
+            case "signage": 
+            toneInstruction = "CONTEXT: PRINTED SIGNAGE. Focus on high impact and brevity. IGNORE sentence fragments and exclamation points—they are desired for effect."; 
+            break;
+            case "social": 
+            toneInstruction = "CONTEXT: SOCIAL MEDIA. Focus on engagement. Slang, emojis, exclamation points, and casual grammar are EXPECTED and should NOT be flagged."; 
+            break;
+            case "policy": 
+            toneInstruction = "CONTEXT: CORPORATE POLICY. Focus on professional, formal, and legally precise language. Strict grammar applies."; 
+            break;
+            case "digital": 
+            toneInstruction = "CONTEXT: WEB CONTENT. Focus on readability and SEO. fragments are okay for headers, but body text should be grammatical."; 
+            break;
+            default: 
+            toneInstruction = "Focus on readability and grammar.";
+        }
       }
 
-      const videoInstruction = mimeType.startsWith("video/") ? 
-        "This is a video file. Analyze the visual text (titles, chyrons, signage) AND the spoken audio transcript for errors. Treat spoken words as the 'content'." : "";
-
       systemPrompt = `
-        You are a professional content editor for ${mediaType}. 
         ${toneInstruction}
-        ${videoInstruction}
         
         CONTEXT:
         - Current Date: ${today} (Use this to flag outdated years/dates).
@@ -81,16 +93,16 @@ exports.handler = async (event, context) => {
         
         INSTRUCTIONS:
         1. Identify ACTUAL errors (typos, wrong dates, misleading info).
-        2. DO NOT flag stylistic choices typical for ${mediaType}.
+        2. DO NOT flag stylistic choices typical for ${mediaType} (unless it destroys clarity).
         3. If the text is "punchy" or uses sentence fragments for marketing effect, ACCEPT IT.
         4. CRITICAL: Group repetitive errors into a single suggestion.
         5. Return ONLY a raw JSON array of objects.
         
         Each object must have:
         - "id": A unique number
-        - "original": The exact text snippet
-        - "fix": The suggested replacement
-        - "reason": A brief explanation.
+        - "original": The exact text snippet (or description of visual if video)
+        - "fix": The suggested replacement or improvement action
+        - "reason": A brief explanation of why this change improves quality or correctness.
         - "confidence": "High", "Medium", or "Low"
       `;
     }
