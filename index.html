@@ -22,7 +22,7 @@
             overflow: hidden;
         }
         .collapsible-content.open {
-            max-height: 500px; /* Arbitrary large height */
+            max-height: 500px;
             opacity: 1;
         }
     </style>
@@ -136,44 +136,43 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full min-h-[500px]">
-                        <!-- MY PROJECTS (Was Team Projects) -->
-                        <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
-                            <div class="p-5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                    <!-- 3 COLUMN DASHBOARD -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full min-h-[500px]">
+                        
+                        <!-- COLUMN 1: MY PROJECTS -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
+                            <div class="p-5 border-b border-slate-100 bg-white shrink-0">
                                 <h3 class="font-bold text-lg text-slate-800">My Projects</h3>
-                                <div class="flex gap-2 text-xs">
-                                    <span class="flex items-center gap-1 text-slate-400"><span class="w-2 h-2 rounded-full bg-red-500"></span> Action Req.</span>
-                                </div>
+                                <div class="text-xs text-slate-400">Created by you</div>
                             </div>
-                            
-                            <div class="grid grid-cols-12 px-5 py-3 bg-slate-50/50 text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">
-                                <div class="col-span-1 text-center"></div>
-                                <div class="col-span-4">Project Name</div>
-                                <div class="col-span-2">Status</div>
-                                <div class="col-span-2">Priority</div>
-                                <div class="col-span-1">Owner</div>
-                                <div class="col-span-2 text-right">Deadlines</div>
-                            </div>
-
-                            <div id="list-my-projects" class="divide-y divide-slate-50 p-2 overflow-y-auto scroller">
-                                <!-- JS Injected -->
-                            </div>
+                            <div id="list-my-projects" class="divide-y divide-slate-50 p-2 overflow-y-auto scroller flex-1"></div>
                         </div>
 
-                        <!-- ASSIGNED TO ME -->
+                        <!-- COLUMN 2: ASSIGNED AS REVIEWER -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full relative">
+                            <div class="p-5 border-b border-slate-100 bg-blue-50/50 shrink-0">
+                                <h3 class="font-bold text-lg text-blue-900">Assigned Reviewer</h3>
+                                <div class="text-xs text-blue-400 flex justify-between">
+                                    <span>Vote & Comment</span>
+                                    <span id="badge-reviewer" class="bg-blue-500 text-white px-2 rounded-full font-bold">0</span>
+                                </div>
+                            </div>
+                            <div id="list-assigned-reviewer" class="divide-y divide-slate-50 p-2 overflow-y-auto scroller flex-1"></div>
+                        </div>
+
+                        <!-- COLUMN 3: ASSIGNED AS APPROVER -->
                         <div class="bg-slate-900 rounded-2xl shadow-xl overflow-hidden flex flex-col text-white relative h-full">
                             <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
-                            <div class="p-6 border-b border-white/10 relative z-10 shrink-0">
-                                <div class="flex justify-between items-center mb-1">
-                                    <h3 class="font-bold text-lg">Assigned to You</h3>
-                                    <span id="badge-assigned" class="bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">0</span>
+                            <div class="p-5 border-b border-white/10 relative z-10 shrink-0">
+                                <h3 class="font-bold text-lg text-white">Assigned Approver</h3>
+                                <div class="text-xs text-slate-400 flex justify-between">
+                                    <span>Final Authority</span>
+                                    <span id="badge-approver" class="bg-emerald-500 text-white px-2 rounded-full font-bold">0</span>
                                 </div>
-                                <p class="text-slate-400 text-xs">Action required on these items.</p>
                             </div>
-                            <div id="list-assigned-docs" class="p-4 space-y-3 relative z-10 overflow-y-auto scroller h-full">
-                                <!-- JS Injected -->
-                            </div>
+                            <div id="list-assigned-approver" class="p-4 space-y-3 relative z-10 overflow-y-auto scroller h-full"></div>
                         </div>
+
                     </div>
                 </div>
             </div>
@@ -249,7 +248,6 @@
                             </div>
                             <div id="file-preview-name" class="text-slate-600 font-medium">Click to upload document or video</div>
                             <p class="text-xs text-slate-400 mt-1">PDF, JPG, PNG, MP4 supported</p>
-                            <!-- UPDATED: Added accept attribute for MP4 -->
                             <input type="file" id="file-upload" class="hidden" accept="image/*,application/pdf,video/mp4" onchange="handleFilePreview(this)">
                         </div>
 
@@ -375,13 +373,34 @@
 
     <!-- MODALS -->
     
-    <!-- Assign Modal -->
+    <!-- Assign Modal (UPDATED) -->
     <div id="modal-assign" class="hidden fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center fade-in backdrop-blur-sm">
-        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl">
-            <h3 class="text-xl font-bold mb-4 brand-font">Assign Reviewer</h3>
-            <p class="text-sm text-slate-500 mb-6">Select a team member to review this document.</p>
-            <div id="user-list-container" class="grid grid-cols-3 gap-4 mb-6 max-h-60 overflow-y-auto scroller"></div>
-            <button onclick="closeModal('modal-assign')" class="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition">Cancel</button>
+        <div class="bg-white rounded-2xl w-full max-w-xl p-6 shadow-2xl flex flex-col max-h-[90vh]">
+            <h3 class="text-xl font-bold mb-1 brand-font">Assign Team</h3>
+            <p class="text-sm text-slate-500 mb-4">Select reviewers and one final approver.</p>
+            
+            <div class="flex-1 overflow-y-auto scroller space-y-6 px-2">
+                <!-- Reviewers Section -->
+                <div>
+                    <h4 class="text-xs font-bold text-blue-500 uppercase tracking-wider mb-2">1. Select Reviewers (Multiple)</h4>
+                    <div id="list-reviewers" class="grid grid-cols-2 gap-3">
+                        <!-- Checkboxes injected here -->
+                    </div>
+                </div>
+
+                <!-- Approver Section -->
+                <div>
+                    <h4 class="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2">2. Select Final Approver (One)</h4>
+                    <div id="list-approvers" class="grid grid-cols-2 gap-3">
+                        <!-- Radios injected here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 pt-4 border-t flex gap-3">
+                 <button onclick="closeModal('modal-assign')" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition">Cancel</button>
+                 <button onclick="saveAssignments()" class="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-bold hover:bg-emerald-600 transition shadow-lg">Save Assignments</button>
+            </div>
         </div>
     </div>
 
@@ -417,7 +436,7 @@
         </div>
     </div>
 
-    <!-- LOGIC (NOW LINKED EXTERNALLY) -->
+    <!-- LOGIC -->
     <script type="module" src="app.js"></script>
 </body>
 </html>
