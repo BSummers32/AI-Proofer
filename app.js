@@ -276,11 +276,6 @@ window.submitProject = async () => {
                 isRevision: true,
                 revisionCount: newCount 
             });
-            // Notify all reviewers
-            if(currentProject.reviewerIds && currentProject.reviewerIds.length > 0) {
-                // In real app, loop emails.
-                console.log("Notifying reviewers...");
-            }
             window.loadProject(currentProject.id);
         } else {
             const docRef = await addDoc(collection(db, "projects"), {
@@ -379,15 +374,18 @@ async function loadDashboard() {
         syncProjectTasks(myDocs);
     });
 
-    // FETCH 2: Assigned as Reviewer
+    // FETCH 2: Assigned as Reviewer (FILTERED: Remove if also Approver)
     onSnapshot(query(collection(db, "projects"), where("reviewerIds", "array-contains", currentUser.uid)), (snapshot) => {
         const container = document.getElementById('list-assigned-reviewer');
         const badge = document.getElementById('badge-reviewer');
         container.innerHTML = '';
-        const docs = [];
+        let docs = [];
         snapshot.forEach(doc => {
             const d = doc.data();
-            if(d.status !== 'Archived' && d.status !== 'Approved') docs.push({ id: doc.id, ...d });
+            // FILTER: If I am the approver, don't show here. Show in Approver col.
+            if(d.status !== 'Archived' && d.status !== 'Approved' && d.approverId !== currentUser.uid) {
+                docs.push({ id: doc.id, ...d });
+            }
         });
         badge.innerText = docs.length;
         if(docs.length === 0) container.innerHTML = '<div class="p-8 text-center text-slate-400 text-sm">No reviews assigned.</div>';
@@ -438,14 +436,15 @@ function renderTeamRow(data, id, container, isMyProjectView) {
                         data.priority === "High" ? `<span class="text-orange-500 font-bold text-xs">High</span>` : 
                         `<span class="text-slate-400 text-xs">Normal</span>`;
 
+    // FIX: Show both dates
     const nextDate = data.deadlineNext ? new Date(data.deadlineNext).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
+    const finalDate = data.deadlineFinal ? new Date(data.deadlineFinal).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
     
     const isOwner = data.creatorId === currentUser.uid;
-    const isReviewer = (data.reviewerIds || []).includes(currentUser.uid);
     
-    // Allow delete if owner
+    // FIX: Delete button StopPropagation
     const deleteBtn = isOwner ? 
-        `<button onclick="deleteProject('${id}', '${data.storagePath || ''}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition z-10 relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` : `<div class="w-8"></div>`;
+        `<button onclick="event.stopPropagation(); window.deleteProject('${id}', '${data.storagePath || ''}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition z-10 relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` : `<div class="w-8"></div>`;
 
     let notifyDot = '';
     if(isMyProjectView && data.status === 'Changes Requested') {
@@ -468,14 +467,16 @@ function renderTeamRow(data, id, container, isMyProjectView) {
         <div class="col-span-1 flex items-center gap-2">
             <img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full border border-white shadow-sm" title="${data.creatorName}">
         </div>
-        <div class="col-span-2 text-right text-xs text-slate-500 font-medium">${data.deadlineNext ? `Due: ${nextDate}` : ''}</div>
+        <div class="col-span-2 text-right">
+             <div class="text-[10px] text-slate-500 font-bold">Next: ${nextDate}</div>
+             <div class="text-[10px] text-slate-400">Final: ${finalDate}</div>
+        </div>
     `;
     container.appendChild(div);
 }
 
 function renderCard(data, id, container, type) {
     const div = document.createElement('div');
-    // Different styles for Reviewer vs Approver columns
     const bgClass = type === 'approver' ? 'bg-white/10 hover:bg-white/15' : 'bg-white border-slate-100 hover:shadow-md';
     const textClass = type === 'approver' ? 'text-white' : 'text-slate-800';
     const subTextClass = type === 'approver' ? 'text-slate-400' : 'text-slate-500';
@@ -485,15 +486,23 @@ function renderCard(data, id, container, type) {
     
     let badge = data.priority === "Urgent" ? `<span class="bg-red-500/20 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-red-500/30">Urgent 🔥</span>` : "";
     
+    // Dates
+    const nextDate = data.deadlineNext ? new Date(data.deadlineNext).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
+    const finalDate = data.deadlineFinal ? new Date(data.deadlineFinal).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
+
     div.innerHTML = `
         <div class="flex justify-between items-start mb-2">
             <div class="flex items-center gap-2">${badge}</div>
             <span class="text-emerald-400 font-bold text-[10px] uppercase ml-2">${data.status}</span>
         </div>
         <h4 class="font-bold text-sm mb-3 ${textClass} truncate">${data.title}</h4>
-        <div class="flex justify-between items-end">
+        <div class="flex justify-between items-end mb-2">
             <div class="text-xs ${subTextClass}">Owner: <span class="font-bold">${data.creatorName.split(' ')[0]}</span></div>
             <div class="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-bold text-white shadow-lg shadow-emerald-500/50">${data.creatorName[0]}</div>
+        </div>
+        <div class="flex justify-between items-center pt-2 border-t ${type==='approver' ? 'border-white/10' : 'border-slate-100'} text-[10px] ${subTextClass}">
+            <span>Goal: ${nextDate}</span>
+            <span>Final: ${finalDate}</span>
         </div>
     `;
     container.appendChild(div);
@@ -566,6 +575,7 @@ function renderProjectView() {
     const isReviewer = (p.reviewerIds || []).includes(currentUser.uid);
     const isApprover = p.approverId === currentUser.uid;
     const isCreator = p.creatorId === currentUser.uid;
+    // FIX: ensure buttons show for any of these roles
     const canEdit = (isCreator || isReviewer || isApprover) && p.status !== 'Approved' && p.status !== 'Archived';
     
     // AI Suggestions List
@@ -725,7 +735,7 @@ window.openAssignModal = async () => {
     
     snaps.forEach(s => {
         const u = s.data();
-        if(u.uid === currentUser.uid) return; // Can't assign self? (Optional: allow self-assign)
+        if(u.uid === currentUser.uid) return; 
 
         // Render Reviewer Checkbox
         const divR = document.createElement('div');

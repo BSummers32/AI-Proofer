@@ -115,7 +115,7 @@
                         </div>
                     </div>
 
-                    <!-- NEW: ALL PROJECTS (Collapsible) -->
+                    <!-- ALL PROJECTS (Collapsible) -->
                     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col mb-8">
                         <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 cursor-pointer hover:bg-slate-100 transition" onclick="toggleAllProjects()">
                             <h3 class="font-bold text-sm text-slate-600 uppercase tracking-wide">All Company Projects</h3>
@@ -145,17 +145,28 @@
                                 <h3 class="font-bold text-lg text-slate-800">My Projects</h3>
                                 <div class="text-xs text-slate-400">Created by you</div>
                             </div>
+                            <!-- Column Headers -->
+                            <div class="grid grid-cols-12 px-3 py-2 bg-slate-50 text-[9px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                                <div class="col-span-5">Project</div>
+                                <div class="col-span-3">Status</div>
+                                <div class="col-span-4 text-right">Due Dates</div>
+                            </div>
                             <div id="list-my-projects" class="divide-y divide-slate-50 p-2 overflow-y-auto scroller flex-1"></div>
                         </div>
 
                         <!-- COLUMN 2: ASSIGNED AS REVIEWER -->
                         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full relative">
                             <div class="p-5 border-b border-slate-100 bg-blue-50/50 shrink-0">
-                                <h3 class="font-bold text-lg text-blue-900">Assigned Reviewer</h3>
-                                <div class="text-xs text-blue-400 flex justify-between">
-                                    <span>Vote & Comment</span>
-                                    <span id="badge-reviewer" class="bg-blue-500 text-white px-2 rounded-full font-bold">0</span>
+                                <div class="flex justify-between items-center">
+                                    <h3 class="font-bold text-lg text-blue-900">Assigned Reviewer</h3>
+                                    <span id="badge-reviewer" class="bg-blue-500 text-white px-2 rounded-full font-bold text-xs">0</span>
                                 </div>
+                                <div class="text-xs text-blue-400">Vote & Comment</div>
+                            </div>
+                            <!-- Column Headers -->
+                            <div class="flex justify-between px-4 py-2 bg-blue-50/20 text-[9px] font-bold text-blue-300 uppercase tracking-wider border-b border-blue-100">
+                                <span>Project & Owner</span>
+                                <span>Status / Due</span>
                             </div>
                             <div id="list-assigned-reviewer" class="divide-y divide-slate-50 p-2 overflow-y-auto scroller flex-1"></div>
                         </div>
@@ -164,11 +175,16 @@
                         <div class="bg-slate-900 rounded-2xl shadow-xl overflow-hidden flex flex-col text-white relative h-full">
                             <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
                             <div class="p-5 border-b border-white/10 relative z-10 shrink-0">
-                                <h3 class="font-bold text-lg text-white">Assigned Approver</h3>
-                                <div class="text-xs text-slate-400 flex justify-between">
-                                    <span>Final Authority</span>
-                                    <span id="badge-approver" class="bg-emerald-500 text-white px-2 rounded-full font-bold">0</span>
+                                <div class="flex justify-between items-center">
+                                    <h3 class="font-bold text-lg text-white">Assigned Approver</h3>
+                                    <span id="badge-approver" class="bg-emerald-500 text-white px-2 rounded-full font-bold text-xs">0</span>
                                 </div>
+                                <div class="text-xs text-slate-400">Final Authority</div>
+                            </div>
+                             <!-- Column Headers -->
+                             <div class="flex justify-between px-4 py-2 bg-white/5 text-[9px] font-bold text-slate-500 uppercase tracking-wider border-b border-white/5 relative z-10">
+                                <span>Project & Owner</span>
+                                <span>Status / Due</span>
                             </div>
                             <div id="list-assigned-approver" class="p-4 space-y-3 relative z-10 overflow-y-auto scroller h-full"></div>
                         </div>
@@ -373,7 +389,7 @@
 
     <!-- MODALS -->
     
-    <!-- Assign Modal (UPDATED) -->
+    <!-- Assign Modal -->
     <div id="modal-assign" class="hidden fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center fade-in backdrop-blur-sm">
         <div class="bg-white rounded-2xl w-full max-w-xl p-6 shadow-2xl flex flex-col max-h-[90vh]">
             <h3 class="text-xl font-bold mb-1 brand-font">Assign Team</h3>
