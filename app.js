@@ -26,7 +26,7 @@ let currentProject = null;
 let isRevisionMode = false;
 let chatUnsubscribe = null; 
 let fileToUpload = null;
-let fileBase64 = null; // Still needed for client-side preview
+let fileBase64 = null;
 
 // --- UTILS: SHORT STATUS PILLS ---
 const getStatusPill = (status) => {
@@ -39,7 +39,7 @@ const getStatusPill = (status) => {
     }
 };
 
-// --- GOOGLE TASKS SERVICE ---
+// --- GOOGLE TASKS SERVICE (Abbreviated for brevity, logic unchanged) ---
 const TaskService = {
     async getAccessToken() { return sessionStorage.getItem('google_access_token'); },
     async ensureTaskList(token) {
@@ -63,20 +63,17 @@ const TaskService = {
     },
     async createTask(title, dueDateStr) {
         const token = await this.getAccessToken();
-        if (!token) { console.warn("No Google Task token found"); return; }
+        if (!token) return;
         const listId = await this.ensureTaskList(token);
         if (!listId) return;
         const payload = { title: title };
         if (dueDateStr) { const date = new Date(dueDateStr); date.setHours(9, 0, 0, 0); payload.due = date.toISOString(); }
-        
         try {
-            const res = await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks`, {
+            await fetch(`https://tasks.googleapis.com/tasks/v1/lists/${listId}/tasks`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            if(!res.ok) console.error("Failed to create task", await res.text());
-            else console.log("Task created:", title);
         } catch(e) { console.error(e); }
     }
 };
@@ -85,7 +82,6 @@ async function syncProjectTasks(projects) {
     if (!currentUser) return;
     for (const p of projects) {
         let actionNeeded = null;
-        // Logic updated for arrays
         const isReviewer = (p.reviewerIds || []).includes(currentUser.uid);
         const isApprover = p.approverId === currentUser.uid;
         const isCreator = p.creatorId === currentUser.uid;
@@ -161,7 +157,6 @@ window.startUpload = (revisionMode = false) => {
     document.getElementById('upload-status').classList.add('hidden'); 
     document.getElementById('btn-submit-project').disabled = false;
 
-    // FIX FOR DATES
     if(isRevisionMode && currentProject) {
         document.getElementById('wizard-title').innerText = "Upload Revision";
         document.getElementById('input-title').value = currentProject.title; 
@@ -191,9 +186,6 @@ window.submitProject = async () => {
     const statusMsg = document.getElementById('upload-status');
 
     if(!fileToUpload) return alert("Please upload a file first.");
-    
-    // Safety check for base64 only if we are displaying a preview immediately, 
-    // but for upload we use fileToUpload object.
     if(!fileBase64 && !fileToUpload) return alert("File is still processing.");
 
     btn.disabled = true;
@@ -208,8 +200,6 @@ window.submitProject = async () => {
         const isBinary = isImage || isPdf || isVideo;
 
         const storageRef = ref(storage, `projects/${currentUser.uid}/${Date.now()}_${fileToUpload.name}`);
-        
-        // FIX: Use uploadBytes for better large file handling (Videos)
         await uploadBytes(storageRef, fileToUpload);
         const url = await getDownloadURL(storageRef);
 
@@ -227,14 +217,14 @@ window.submitProject = async () => {
 
         if(isRevisionMode && currentProject.aiSuggestions && currentProject.aiSuggestions.length > 0) {
             const accepted = currentProject.aiSuggestions.filter(s => s.status === 'accepted');
-            if(accepted.length > 0) {
-                payload.mode = 'verify';
-                payload.expectedEdits = accepted;
-            }
+            // Pass ALL suggestions to help AI know what to ignore/verify
+            payload.mode = 'verify';
+            payload.expectedEdits = accepted;
+            payload.previousSuggestions = currentProject.aiSuggestions;
         }
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // Extended timeout for video
+        const timeoutId = setTimeout(() => controller.abort(), 60000); 
 
         let suggestions = [];
         try {
@@ -249,15 +239,14 @@ window.submitProject = async () => {
             const data = await res.json();
             suggestions = Array.isArray(data) ? data : [];
             
-            if(payload.mode === 'verify') {
-                suggestions = suggestions.map((r, i) => ({
-                    id: i, original: "Pending Fix", fix: r.fix, 
-                    reason: r.status === 'verified' ? "✅ Verified Fix" : "❌ Fix Failed",
-                    status: r.status === 'verified' ? 'accepted' : 'rejected'
-                }));
-            } else {
-                suggestions = suggestions.map(s => ({...s, status: 'pending'}));
-            }
+            // Init voting structure for new suggestions
+            suggestions = suggestions.map(s => ({
+                ...s, 
+                status: 'pending', 
+                votesUp: [], 
+                votesDown: [] 
+            }));
+
         } catch(fetchError) {
              console.warn("AI Analysis skipped or failed", fetchError);
         }
@@ -293,8 +282,8 @@ window.submitProject = async () => {
                 creatorEmail: currentUser.email,
                 creatorPhoto: currentUser.photoURL,
                 createdAt: serverTimestamp(),
-                reviewerIds: [], // New: Array of reviewer UIDs
-                approverId: null, // New: Single approver UID
+                reviewerIds: [], 
+                approverId: null, 
                 ...commonData
             });
             window.loadProject(docRef.id);
@@ -379,7 +368,7 @@ async function loadDashboard() {
         syncProjectTasks(myDocs);
     });
 
-    // FETCH 2: Assigned as Reviewer (FILTERED: Remove if also Approver)
+    // FETCH 2: Assigned as Reviewer
     onSnapshot(query(collection(db, "projects"), where("reviewerIds", "array-contains", currentUser.uid)), (snapshot) => {
         const container = document.getElementById('list-assigned-reviewer');
         const badge = document.getElementById('badge-reviewer');
@@ -387,7 +376,7 @@ async function loadDashboard() {
         let docs = [];
         snapshot.forEach(doc => {
             const d = doc.data();
-            // FILTER: If I am the approver, don't show here. Show in Approver col.
+            // FILTER: If I am the approver, don't show here.
             if(d.status !== 'Archived' && d.status !== 'Approved' && d.approverId !== currentUser.uid) {
                 docs.push({ id: doc.id, ...d });
             }
@@ -441,13 +430,10 @@ function renderTeamRow(data, id, container, isMyProjectView) {
                         data.priority === "High" ? `<span class="text-orange-500 font-bold text-xs">High</span>` : 
                         `<span class="text-slate-400 text-xs">Normal</span>`;
 
-    // FIX: Show both dates
     const nextDate = data.deadlineNext ? new Date(data.deadlineNext).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
     const finalDate = data.deadlineFinal ? new Date(data.deadlineFinal).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
     
     const isOwner = data.creatorId === currentUser.uid;
-    
-    // FIX: Delete button updated to avoid passing path in HTML
     const deleteBtn = isOwner ? 
         `<button onclick="event.stopPropagation(); window.deleteProject('${id}')" class="text-slate-300 hover:text-red-500 p-1.5 rounded hover:bg-red-50 transition z-10 relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>` : `<div class="w-8"></div>`;
 
@@ -458,25 +444,46 @@ function renderTeamRow(data, id, container, isMyProjectView) {
 
     div.onclick = () => window.loadProject(id);
 
-    div.innerHTML = `
-        <div class="col-span-1 text-center" onclick="event.stopPropagation()">${deleteBtn}</div>
-        <div class="col-span-4 relative">
-            <div class="flex items-center gap-2 relative inline-block">
-                <div class="font-bold text-slate-700 text-sm truncate pr-2">${data.title}</div>
-                ${notifyDot}
+    // COLUMN LOGIC: If My Project, hide Owner column, Expand Title
+    if (isMyProjectView) {
+        div.innerHTML = `
+            <div class="col-span-1 text-center" onclick="event.stopPropagation()">${deleteBtn}</div>
+            <div class="col-span-5 relative"> <!-- Expanded from 4 to 5 -->
+                <div class="flex items-center gap-2 relative inline-block">
+                    <div class="font-bold text-slate-700 text-sm truncate pr-2">${data.title}</div>
+                    ${notifyDot}
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5 font-bold uppercase tracking-wide">${data.mediaType} • ${revisionText}</div>
             </div>
-            <div class="text-[10px] text-slate-400 mt-0.5 font-bold uppercase tracking-wide">${data.mediaType} • ${revisionText}</div>
-        </div>
-        <div class="col-span-2">${statusPill}</div>
-        <div class="col-span-2">${priorityBadge}</div>
-        <div class="col-span-1 flex items-center gap-2">
-            <img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full border border-white shadow-sm" title="${data.creatorName}">
-        </div>
-        <div class="col-span-2 text-right">
-             <div class="text-[10px] text-slate-500 font-bold">Next: ${nextDate}</div>
-             <div class="text-[10px] text-slate-400">Final: ${finalDate}</div>
-        </div>
-    `;
+            <div class="col-span-2">${statusPill}</div>
+            <div class="col-span-2">${priorityBadge}</div>
+            <!-- Owner Column Removed -->
+            <div class="col-span-2 text-right">
+                 <div class="text-[10px] text-slate-500 font-bold">Next: ${nextDate}</div>
+                 <div class="text-[10px] text-slate-400">Final: ${finalDate}</div>
+            </div>
+        `;
+    } else {
+        // Default View (All Projects / Archived)
+        div.innerHTML = `
+            <div class="col-span-1 text-center" onclick="event.stopPropagation()">${deleteBtn}</div>
+            <div class="col-span-4 relative">
+                <div class="flex items-center gap-2 relative inline-block">
+                    <div class="font-bold text-slate-700 text-sm truncate pr-2">${data.title}</div>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5 font-bold uppercase tracking-wide">${data.mediaType} • ${revisionText}</div>
+            </div>
+            <div class="col-span-2">${statusPill}</div>
+            <div class="col-span-2">${priorityBadge}</div>
+            <div class="col-span-1 flex items-center gap-2">
+                <img src="${data.creatorPhoto}" class="w-6 h-6 rounded-full border border-white shadow-sm" title="${data.creatorName}">
+            </div>
+            <div class="col-span-2 text-right">
+                 <div class="text-[10px] text-slate-500 font-bold">Next: ${nextDate}</div>
+                 <div class="text-[10px] text-slate-400">Final: ${finalDate}</div>
+            </div>
+        `;
+    }
     container.appendChild(div);
 }
 
@@ -490,8 +497,6 @@ function renderCard(data, id, container, type) {
     div.onclick = () => window.loadProject(id);
     
     let badge = data.priority === "Urgent" ? `<span class="bg-red-500/20 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded uppercase border border-red-500/30">Urgent 🔥</span>` : "";
-    
-    // Dates
     const nextDate = data.deadlineNext ? new Date(data.deadlineNext).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
     const finalDate = data.deadlineFinal ? new Date(data.deadlineFinal).toLocaleDateString(undefined, {month:'short', day:'numeric'}) : '-';
 
@@ -551,6 +556,22 @@ function renderProjectView() {
     document.getElementById('project-priority-badge').innerText = p.priority || 'Normal';
     if(p.isRevision) document.getElementById('verification-badge').classList.remove('hidden');
     
+    // TAB NOTIFICATION: Check for manual suggestions if I am creator
+    const tabReview = document.getElementById('btn-tab-review');
+    const noteCount = (p.reviewerSuggestions || []).length;
+    // Simple logic: if notes exist and I'm creator, show badge. 
+    // (Ideally we'd track 'read' state per note, but simple existence check for now as requested)
+    if(noteCount > 0 && p.creatorId === currentUser.uid) {
+        if(!tabReview.querySelector('.notif-bubble')) {
+            tabReview.innerHTML += `<span class="notif-bubble absolute top-1 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>`;
+            tabReview.classList.add('relative');
+        }
+    } else {
+        const bubble = tabReview.querySelector('.notif-bubble');
+        if(bubble) bubble.remove();
+    }
+
+    // DOCUMENT RENDERING (UNCHANGED)
     const docContainer = document.getElementById('doc-view-container');
     const diffContainer = document.getElementById('diff-view-container');
     const diffMsg = document.getElementById('diff-toggle-msg');
@@ -576,57 +597,85 @@ function renderProjectView() {
         }
     }
 
-    // ROLES
-    const isReviewer = (p.reviewerIds || []).includes(currentUser.uid);
+    // PERMISSIONS
     const isApprover = p.approverId === currentUser.uid;
+    const isReviewer = (p.reviewerIds || []).includes(currentUser.uid);
     const isCreator = p.creatorId === currentUser.uid;
-    // FIX: ensure buttons show for any of these roles
-    const canEdit = (isCreator || isReviewer || isApprover) && p.status !== 'Approved' && p.status !== 'Archived';
+    const canInteract = (isCreator || isReviewer || isApprover) && p.status !== 'Approved' && p.status !== 'Archived';
     
-    // AI Suggestions List
+    // AI SUGGESTIONS & VOTING
     const aiList = document.getElementById('ai-feedback-list');
     aiList.innerHTML = '';
     if(!p.aiSuggestions || p.aiSuggestions.length === 0) aiList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No AI suggestions found.</div>';
     
     (p.aiSuggestions || []).forEach((s, idx) => {
+        // Status Styling
         const isRejected = s.status === 'rejected';
         const isAccepted = s.status === 'accepted';
         const accentColor = isRejected ? 'bg-red-400' : isAccepted ? 'bg-emerald-500' : 'bg-slate-300';
         const badgeColor = isRejected ? 'text-red-600 bg-red-50' : isAccepted ? 'text-emerald-600 bg-emerald-50' : 'text-slate-500 bg-slate-100';
-        const badgeText = s.status === 'pending' ? 'Suggestion' : s.status;
+        const badgeText = s.status === 'pending' ? 'Pending' : s.status;
 
-        // VOTING BUTTONS: Allow toggling
-        const actionButtons = canEdit ? `
-            <div class="mt-4 flex gap-2">
-                <button onclick="updateSuggestion(${idx}, 'accepted')" class="flex-1 ${isAccepted ? 'bg-emerald-600' : 'bg-slate-900'} text-white py-2 rounded-lg text-xs font-bold hover:bg-emerald-500 transition shadow-md shadow-slate-200">
-                   ${isAccepted ? '✓ Accepted' : 'Accept'}
+        // VOTES
+        const upVotes = (s.votesUp || []).length;
+        const downVotes = (s.votesDown || []).length;
+        const hasVotedUp = (s.votesUp || []).includes(currentUser.uid);
+        const hasVotedDown = (s.votesDown || []).includes(currentUser.uid);
+
+        // VOTING BUTTONS HTML
+        const votingHTML = canInteract ? `
+            <div class="flex items-center gap-2">
+                <button onclick="voteSuggestion(${idx}, 'up')" class="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-bold transition ${hasVotedUp ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>
+                    <span>${upVotes}</span>
                 </button>
-                <button onclick="updateSuggestion(${idx}, 'rejected')" class="flex-1 ${isRejected ? 'bg-red-600 text-white' : 'bg-white text-slate-400 border border-slate-200'} py-2 rounded-lg text-xs font-bold hover:bg-red-500 hover:text-white transition">
-                   ${isRejected ? '✕ Rejected' : 'Reject'}
+                <button onclick="voteSuggestion(${idx}, 'down')" class="flex items-center gap-1 px-3 py-1.5 rounded-lg border text-xs font-bold transition ${hasVotedDown ? 'bg-red-500 text-white border-red-500' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>
+                    <span>${downVotes}</span>
                 </button>
+            </div>
+        ` : '';
+
+        // APPROVER FINAL DECISION HTML
+        // Only approver sees "Final Decision" toggles. Everyone else sees just voting.
+        const decisionHTML = isApprover && canInteract ? `
+            <div class="flex gap-1">
+                 <button onclick="updateSuggestion(${idx}, 'accepted')" title="Final Approve" class="p-1.5 rounded-md hover:bg-emerald-100 text-slate-400 hover:text-emerald-600 ${isAccepted ? 'text-emerald-600 bg-emerald-100' : ''}">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                 </button>
+                 <button onclick="updateSuggestion(${idx}, 'rejected')" title="Final Reject" class="p-1.5 rounded-md hover:bg-red-100 text-slate-400 hover:text-red-600 ${isRejected ? 'text-red-600 bg-red-100' : ''}">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                 </button>
             </div>
         ` : '';
 
         aiList.innerHTML += `
         <div class="bg-white rounded-xl shadow-md border border-slate-100 overflow-hidden flex transition hover:shadow-lg mb-4">
-            <div class="w-2 ${accentColor} shrink-0"></div>
-            <div class="flex-1 p-5">
-                <div class="flex justify-between items-start mb-3">
+            <div class="w-1.5 ${accentColor} shrink-0"></div>
+            <div class="flex-1 p-4">
+                <div class="flex justify-between items-start mb-2">
                     <span class="text-[10px] font-bold uppercase tracking-wider ${badgeColor} px-2 py-1 rounded-md">
                         ${badgeText}
                     </span>
+                    ${decisionHTML}
                 </div>
-                <p class="text-slate-600 text-sm leading-snug mb-4">${s.reason}</p>
-                <div class="space-y-1">
-                    <div class="text-xs text-slate-400 line-through decoration-red-300 decoration-2 px-3 py-1">${s.original}</div>
-                    <div class="bg-emerald-50 text-emerald-900 text-sm font-bold px-3 py-3 rounded-lg border-l-2 border-emerald-500 shadow-sm">${s.fix}</div>
+                <p class="text-slate-700 text-sm leading-snug mb-3 font-medium">${s.reason}</p>
+                <div class="grid grid-cols-1 gap-2 mb-4">
+                    <div class="bg-red-50 text-red-800 text-xs px-3 py-2 rounded border border-red-100 line-through decoration-red-300">${s.original}</div>
+                    <div class="bg-emerald-50 text-emerald-800 text-xs px-3 py-2 rounded border border-emerald-100 font-bold flex items-center gap-2">
+                        <svg width="12" height="12" class="text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                        ${s.fix}
+                    </div>
                 </div>
-                ${actionButtons}
+                <div class="flex justify-between items-center border-t border-slate-50 pt-3">
+                    ${votingHTML}
+                    <span class="text-[10px] text-slate-300 font-bold uppercase tracking-widest">AI Suggestion</span>
+                </div>
             </div>
         </div>`;
     });
 
-    // Manual Notes
+    // Manual Notes (Unchanged)
     const manualList = document.getElementById('manual-feedback-list');
     manualList.innerHTML = '';
     if(!p.reviewerSuggestions || p.reviewerSuggestions.length === 0) manualList.innerHTML = '<div class="text-center text-sm text-slate-400 mt-4">No reviewer notes yet.</div>';
@@ -645,7 +694,6 @@ function renderProjectView() {
             </div>`;
     });
 
-    // ACTION BUTTON LOGIC
     document.getElementById('manual-note-form').classList.add('hidden');
     const actions = document.getElementById('action-buttons');
     actions.innerHTML = '';
@@ -655,29 +703,62 @@ function renderProjectView() {
         if(p.status === 'Changes Requested') actions.innerHTML = `<button onclick="startUpload(true)" class="bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Upload Revision</button>`;
     } 
     
-    // Reviewers AND Approvers can request changes
     if((isReviewer || isApprover) && p.status === 'Needs Review') {
         document.getElementById('manual-note-form').classList.remove('hidden');
         actions.innerHTML = `<button onclick="submitReview('Changes Requested')" class="bg-white border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition">Request Changes</button>`;
-        
-        // Only Approver can approve finally
         if(isApprover) {
             actions.innerHTML += `<button onclick="openChecklist()" class="ml-2 bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-600 transition shadow-md">Final Approval</button>`;
         }
     }
 
-    // Only Approver can Final Commit (Archive)
     if(p.status === 'Approved' && isApprover) {
         actions.innerHTML = `<button onclick="finalizeProject()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-900 transition shadow-lg">Final Commit & Archive</button>`;
     }
 }
 
+// --- VOTING LOGIC ---
+window.voteSuggestion = async (idx, type) => {
+    if(!currentProject) return;
+    const suggestions = [...currentProject.aiSuggestions];
+    const item = suggestions[idx];
+    
+    // Ensure arrays exist
+    if(!item.votesUp) item.votesUp = [];
+    if(!item.votesDown) item.votesDown = [];
+    
+    const uid = currentUser.uid;
+
+    if (type === 'up') {
+        // Toggle Up
+        if (item.votesUp.includes(uid)) {
+            item.votesUp = item.votesUp.filter(id => id !== uid);
+        } else {
+            item.votesUp.push(uid);
+            // Remove from down if exists
+            item.votesDown = item.votesDown.filter(id => id !== uid);
+        }
+    } else {
+        // Toggle Down
+        if (item.votesDown.includes(uid)) {
+            item.votesDown = item.votesDown.filter(id => id !== uid);
+        } else {
+            item.votesDown.push(uid);
+            // Remove from up if exists
+            item.votesUp = item.votesUp.filter(id => id !== uid);
+        }
+    }
+    
+    await updateDoc(doc(db, "projects", currentProject.id), { aiSuggestions: suggestions });
+};
+
 window.updateSuggestion = async (i, s) => {
-    // Allows toggling states
     const newS = [...currentProject.aiSuggestions];
     newS[i].status = s;
     await updateDoc(doc(db, "projects", currentProject.id), { aiSuggestions: newS });
 };
+
+// ... (Rest of logic: toggleManualNote, addManualSuggestion, sendChatMessage, openAssignModal, saveAssignments, etc. remains the same)
+// ... Including deleteProject, finalizeProject, etc.
 
 window.toggleManualNote = async (idx) => {
     if(!currentProject) return;
@@ -718,77 +799,47 @@ window.sendChatMessage = async (e) => {
     } catch(err) { console.error("Chat error:", err); }
 };
 
-// --- NEW ASSIGNMENT LOGIC ---
 let tempReviewers = new Set();
 let tempApprover = null;
 
 window.openAssignModal = async () => {
     document.getElementById('modal-assign').classList.remove('hidden');
-    
-    // Reset temps
     tempReviewers.clear();
     tempApprover = null;
-    
     const listReviewers = document.getElementById('list-reviewers');
     const listApprovers = document.getElementById('list-approvers');
     listReviewers.innerHTML = 'Loading...';
     listApprovers.innerHTML = 'Loading...';
-    
     const snaps = await getDocs(collection(db, "users"));
     listReviewers.innerHTML = '';
     listApprovers.innerHTML = '';
-    
     snaps.forEach(s => {
         const u = s.data();
         if(u.uid === currentUser.uid) return; 
-
-        // Render Reviewer Checkbox
         const divR = document.createElement('div');
         divR.className = "flex items-center gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 border border-slate-100";
         divR.onclick = (e) => {
-            // Toggle
             const cb = divR.querySelector('input');
             cb.checked = !cb.checked;
             if(cb.checked) tempReviewers.add(u.uid); else tempReviewers.delete(u.uid);
         };
-        divR.innerHTML = `
-            <input type="checkbox" value="${u.uid}" class="w-5 h-5 text-blue-600 rounded pointer-events-none">
-            <div class="flex items-center gap-2">
-                <img src="${u.photoURL}" class="w-8 h-8 rounded-full bg-slate-200">
-                <span class="text-sm font-bold text-slate-700">${u.displayName.split(' ')[0]}</span>
-            </div>
-        `;
+        divR.innerHTML = `<input type="checkbox" value="${u.uid}" class="w-5 h-5 text-blue-600 rounded pointer-events-none"><div class="flex items-center gap-2"><img src="${u.photoURL}" class="w-8 h-8 rounded-full bg-slate-200"><span class="text-sm font-bold text-slate-700">${u.displayName.split(' ')[0]}</span></div>`;
         listReviewers.appendChild(divR);
-
-        // Render Approver Radio
         const divA = document.createElement('div');
         divA.className = "flex items-center gap-3 p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 border border-slate-100";
         divA.onclick = () => {
-             // Handle UI selection for radio behavior
              document.querySelectorAll('input[name="approver-radio"]').forEach(r => r.checked = false);
              divA.querySelector('input').checked = true;
              tempApprover = u.uid;
         };
-        divA.innerHTML = `
-            <input type="radio" name="approver-radio" value="${u.uid}" class="w-5 h-5 text-emerald-600 pointer-events-none">
-            <div class="flex items-center gap-2">
-                <img src="${u.photoURL}" class="w-8 h-8 rounded-full bg-slate-200">
-                <span class="text-sm font-bold text-slate-700">${u.displayName.split(' ')[0]}</span>
-            </div>
-        `;
+        divA.innerHTML = `<input type="radio" name="approver-radio" value="${u.uid}" class="w-5 h-5 text-emerald-600 pointer-events-none"><div class="flex items-center gap-2"><img src="${u.photoURL}" class="w-8 h-8 rounded-full bg-slate-200"><span class="text-sm font-bold text-slate-700">${u.displayName.split(' ')[0]}</span></div>`;
         listApprovers.appendChild(divA);
     });
 };
 
 window.saveAssignments = async () => {
     if(!tempApprover) return alert("Please select one Final Approver.");
-    
-    await updateDoc(doc(db, "projects", currentProject.id), { 
-        reviewerIds: Array.from(tempReviewers),
-        approverId: tempApprover,
-        status: 'Needs Review' 
-    });
-    
+    await updateDoc(doc(db, "projects", currentProject.id), { reviewerIds: Array.from(tempReviewers), approverId: tempApprover, status: 'Needs Review' });
     window.closeModal('modal-assign');
 };
 
@@ -799,10 +850,7 @@ window.executeApproval = () => { window.submitReview('Approved'); window.closeMo
 
 window.submitReview = async (status) => {
     await updateDoc(doc(db, "projects", currentProject.id), { status: status });
-    // Notify Creator
-    if (currentProject.creatorEmail) {
-        sendNotification(currentProject.creatorEmail, `Project Update: ${status}`, `<p>Your project <b>${currentProject.title}</b> is now <b>${status}</b>.</p>`);
-    }
+    if (currentProject.creatorEmail) { sendNotification(currentProject.creatorEmail, `Project Update: ${status}`, `<p>Your project <b>${currentProject.title}</b> is now <b>${status}</b>.</p>`); }
 };
 
 window.finalizeProject = async () => {
@@ -816,18 +864,13 @@ window.finalizeProject = async () => {
 };
 
 window.deleteProject = async (id) => {
-    // FIX: Updated to fetch path inside the function (safest for MP4/odd filenames)
     if(!confirm("⚠️ PERMANENT DELETE\nAre you sure you want to remove this project?")) return;
     try {
         const docSnap = await getDoc(doc(db, "projects", id));
         if(!docSnap.exists()) return;
         const data = docSnap.data();
-
         await deleteDoc(doc(db, "projects", id));
-        
-        if(data.storagePath) { 
-            try { await deleteObject(ref(storage, data.storagePath)); } catch(e){ console.warn("Storage delete failed", e); } 
-        }
+        if(data.storagePath) { try { await deleteObject(ref(storage, data.storagePath)); } catch(e){ console.warn("Storage delete failed", e); } }
     } catch(e) { alert("Error: " + e.message); }
 };
 

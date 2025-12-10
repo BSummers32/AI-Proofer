@@ -145,11 +145,12 @@
                                 <h3 class="font-bold text-lg text-slate-800">My Projects</h3>
                                 <div class="text-xs text-slate-400">Created by you</div>
                             </div>
-                            <!-- Column Headers -->
+                            <!-- UPDATED: Removed Owner Column -->
                             <div class="grid grid-cols-12 px-3 py-2 bg-slate-50 text-[9px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                                <div class="col-span-5">Project</div>
-                                <div class="col-span-3">Status</div>
-                                <div class="col-span-4 text-right">Due Dates</div>
+                                <div class="col-span-6">Project</div> <!-- Increased Span -->
+                                <div class="col-span-2">Status</div>
+                                <div class="col-span-2">Priority</div>
+                                <div class="col-span-2 text-right">Due Dates</div>
                             </div>
                             <div id="list-my-projects" class="divide-y divide-slate-50 p-2 overflow-y-auto scroller flex-1"></div>
                         </div>
@@ -193,7 +194,7 @@
                 </div>
             </div>
 
-            <!-- VIEW: ARCHIVED -->
+            <!-- VIEW: ARCHIVED (Unchanged) -->
             <div id="view-archived" class="hidden flex-1 overflow-auto p-8 fade-in">
                 <div class="max-w-5xl mx-auto">
                     <div class="flex items-center gap-2 mb-6">
@@ -206,7 +207,7 @@
                 </div>
             </div>
 
-            <!-- VIEW: WIZARD (Upload/Edit) -->
+            <!-- VIEW: WIZARD -->
             <div id="view-wizard" class="hidden flex-1 overflow-auto p-8 fade-in bg-slate-100 flex justify-center">
                 <div class="max-w-2xl w-full bg-white rounded-2xl shadow-xl border border-slate-200 p-8 h-fit">
                     <button onclick="showDashboard()" class="text-sm text-slate-400 hover:text-emerald-600 mb-6 flex items-center gap-1 font-bold">← Cancel</button>
@@ -291,9 +292,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="flex gap-3" id="action-buttons">
-                        <!-- Dynamic Buttons -->
-                    </div>
+                    <div class="flex gap-3" id="action-buttons"></div>
                 </div>
 
                 <div class="flex-1 flex overflow-hidden">
@@ -305,7 +304,6 @@
                                 <div id="diff-toggle-msg" class="hidden text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-200">Visual Diff Active</div>
                             </div>
                             
-                            <!-- Visual Diff Container -->
                             <div id="diff-view-container" class="hidden flex-1 relative bg-slate-100 rounded overflow-hidden border border-slate-200">
                                 <div class="diff-container" onmousemove="moveDiff(event)" ontouchmove="moveDiff(event)">
                                      <img id="diff-img-old" class="diff-img opacity-50 grayscale" src="" alt="Old">
@@ -317,16 +315,12 @@
                                      </div>
                                 </div>
                             </div>
-
-                            <!-- Standard Container -->
                             <div id="doc-view-container" class="flex-1 text-lg leading-relaxed font-serif text-slate-800 whitespace-pre-wrap"></div>
                         </div>
                     </div>
 
                     <!-- Right: Tabbed Sidebar -->
                     <div class="w-[420px] bg-white border-l border-slate-200 flex flex-col overflow-hidden shadow-2xl z-20">
-                        
-                        <!-- TAB NAVIGATION -->
                         <div class="flex border-b border-slate-200 bg-white">
                             <button onclick="switchTab('tab-ai')" id="btn-tab-ai" class="tab-btn active flex-1 py-3 text-sm font-medium text-center hover:bg-slate-50 transition">AI Insights</button>
                             <button onclick="switchTab('tab-review')" id="btn-tab-review" class="tab-btn flex-1 py-3 text-sm font-medium text-center hover:bg-slate-50 transition">Reviewer Notes</button>
@@ -342,19 +336,12 @@
                                 </span>
                                 <div id="verification-badge" class="hidden bg-emerald-100 text-emerald-700 text-[10px] px-2 py-1 rounded font-bold border border-emerald-200 uppercase">Verified Revision</div>
                             </div>
-                            <div id="ai-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller bg-slate-50/50">
-                                <!-- Injected -->
-                            </div>
+                            <div id="ai-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller bg-slate-50/50"></div>
                         </div>
 
-                         <!-- TAB: REVIEWER NOTES (Manual) -->
+                         <!-- TAB: REVIEWER NOTES -->
                          <div id="tab-review" class="hidden flex-1 flex flex-col min-h-0 bg-slate-50">
-                             <!-- List of Manual Notes -->
-                             <div id="manual-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller">
-                                 <!-- Injected JS -->
-                             </div>
-
-                             <!-- Add Note Form (Only for reviewers/creators) -->
+                             <div id="manual-feedback-list" class="flex-1 overflow-y-auto p-4 space-y-4 scroller"></div>
                              <div id="manual-note-form" class="hidden p-4 bg-white border-t border-slate-200 shadow-up">
                                  <div class="text-xs font-bold text-slate-400 uppercase mb-2">Add Review Note</div>
                                  <input type="text" id="manual-reason" placeholder="Summary (e.g. Change Title)" class="w-full mb-2 border border-slate-300 rounded p-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none">
@@ -368,9 +355,7 @@
 
                         <!-- TAB: CHAT -->
                         <div id="tab-chat" class="hidden flex-1 flex flex-col min-h-0 bg-slate-50">
-                            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 scroller">
-                                <!-- Messages injected here -->
-                            </div>
+                            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 scroller"></div>
                             <div class="p-3 border-t border-slate-200 bg-white">
                                 <form onsubmit="sendChatMessage(event)" class="flex gap-2">
                                     <input type="text" id="chat-input" class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Type a message..." autocomplete="off">
@@ -387,64 +372,31 @@
         </main>
     </div>
 
-    <!-- MODALS -->
-    
-    <!-- Assign Modal -->
+    <!-- MODALS (Assignments / Checklist) - Same as previous, omitted for brevity but logic in app.js -->
     <div id="modal-assign" class="hidden fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center fade-in backdrop-blur-sm">
         <div class="bg-white rounded-2xl w-full max-w-xl p-6 shadow-2xl flex flex-col max-h-[90vh]">
             <h3 class="text-xl font-bold mb-1 brand-font">Assign Team</h3>
             <p class="text-sm text-slate-500 mb-4">Select reviewers and one final approver.</p>
-            
             <div class="flex-1 overflow-y-auto scroller space-y-6 px-2">
-                <!-- Reviewers Section -->
-                <div>
-                    <h4 class="text-xs font-bold text-blue-500 uppercase tracking-wider mb-2">1. Select Reviewers (Multiple)</h4>
-                    <div id="list-reviewers" class="grid grid-cols-2 gap-3">
-                        <!-- Checkboxes injected here -->
-                    </div>
-                </div>
-
-                <!-- Approver Section -->
-                <div>
-                    <h4 class="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2">2. Select Final Approver (One)</h4>
-                    <div id="list-approvers" class="grid grid-cols-2 gap-3">
-                        <!-- Radios injected here -->
-                    </div>
-                </div>
+                <div><h4 class="text-xs font-bold text-blue-500 uppercase tracking-wider mb-2">1. Select Reviewers (Multiple)</h4><div id="list-reviewers" class="grid grid-cols-2 gap-3"></div></div>
+                <div><h4 class="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2">2. Select Final Approver (One)</h4><div id="list-approvers" class="grid grid-cols-2 gap-3"></div></div>
             </div>
-
             <div class="mt-6 pt-4 border-t flex gap-3">
                  <button onclick="closeModal('modal-assign')" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition">Cancel</button>
                  <button onclick="saveAssignments()" class="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-bold hover:bg-emerald-600 transition shadow-lg">Save Assignments</button>
             </div>
         </div>
     </div>
-
-    <!-- Checklist Modal -->
     <div id="modal-checklist" class="hidden fixed inset-0 z-[60] bg-slate-900/60 flex items-center justify-center fade-in backdrop-blur-sm">
         <div class="bg-white rounded-2xl w-full max-w-lg p-8 shadow-2xl">
             <h3 class="text-2xl font-bold mb-2 brand-font text-slate-800">Final Approval Checklist</h3>
             <p class="text-slate-500 mb-6 text-sm">Please confirm all items before approving.</p>
-            
             <div class="space-y-3 mb-8">
-                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition">
-                    <input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()">
-                    <span class="text-slate-700 font-medium">Grammar and spelling is accurate</span>
-                </label>
-                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition">
-                    <input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()">
-                    <span class="text-slate-700 font-medium">Images/Graphics represent message</span>
-                </label>
-                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition">
-                    <input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()">
-                    <span class="text-slate-700 font-medium">Dates and times are stated clearly</span>
-                </label>
-                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition">
-                    <input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()">
-                    <span class="text-slate-700 font-medium">Terms and conditions are correct</span>
-                </label>
+                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition"><input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()"><span class="text-slate-700 font-medium">Grammar and spelling is accurate</span></label>
+                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition"><input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()"><span class="text-slate-700 font-medium">Images/Graphics represent message</span></label>
+                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition"><input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()"><span class="text-slate-700 font-medium">Dates and times are stated clearly</span></label>
+                <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition"><input type="checkbox" class="approval-check w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" onchange="validateChecklist()"><span class="text-slate-700 font-medium">Terms and conditions are correct</span></label>
             </div>
-
             <div class="flex gap-3">
                 <button onclick="closeModal('modal-checklist')" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-200 transition">Cancel</button>
                 <button id="btn-confirm-approve" disabled onclick="executeApproval()" class="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-bold hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-lg">Approve Project</button>
